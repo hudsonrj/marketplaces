@@ -79,3 +79,67 @@ export async function getProductPriceHistory(productId: string) {
         })
     })
 }
+
+export async function getGlobalAnalyticsData(productId?: string) {
+    return new Promise<{
+        marketShare: any[],
+        priceByMarketplace: any[],
+        topSellers: any[]
+    }>((resolve, reject) => {
+        const db = new Database(':memory:')
+        db.serialize(() => {
+            db.run("INSTALL sqlite;")
+            db.run("LOAD sqlite;")
+            db.run(`ATTACH '${dbPath.replace(/\\/g, '/')}' AS mongo (TYPE SQLITE);`)
+
+            const filterClause = productId ? `AND job_id IN (SELECT id FROM mongo.SearchJob WHERE product_id = '${productId}')` : ''
+
+            const queries = {
+                marketShare: `
+                    SELECT marketplace, COUNT(*) as count 
+                    FROM mongo.SearchResult 
+                    WHERE match_score > 50 ${filterClause}
+                    GROUP BY marketplace
+                `,
+                priceByMarketplace: `
+                    SELECT marketplace, AVG(price) as avg_price 
+                    FROM mongo.SearchResult 
+                    WHERE match_score > 50 ${filterClause}
+                    GROUP BY marketplace
+                `,
+                topSellers: `
+                    SELECT seller_name, COUNT(*) as count 
+                    FROM mongo.SearchResult 
+                    WHERE match_score > 50 AND seller_name IS NOT NULL ${filterClause}
+                    GROUP BY seller_name 
+                    ORDER BY count DESC 
+                    LIMIT 10
+                `
+            }
+
+            const results: any = {}
+            let completed = 0
+
+            db.all(queries.marketShare, (err, rows) => {
+                if (err) return reject(err)
+                results.marketShare = rows
+                completed++
+                if (completed === 3) resolve(results)
+            })
+
+            db.all(queries.priceByMarketplace, (err, rows) => {
+                if (err) return reject(err)
+                results.priceByMarketplace = rows
+                completed++
+                if (completed === 3) resolve(results)
+            })
+
+            db.all(queries.topSellers, (err, rows) => {
+                if (err) return reject(err)
+                results.topSellers = rows
+                completed++
+                if (completed === 3) resolve(results)
+            })
+        })
+    })
+}

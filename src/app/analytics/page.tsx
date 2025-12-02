@@ -1,16 +1,22 @@
 import { PrismaClient } from '@prisma/client'
 import { BarChart3, TrendingUp, DollarSign, ShoppingBag } from 'lucide-react'
+import { getGlobalAnalyticsData } from '@/lib/duckdb'
+import GlobalAnalyticsDashboard from './dashboard'
+import ProductFilter from './filter'
 
 const prisma = new PrismaClient()
 
-async function getGlobalStats() {
-    const totalProducts = await prisma.product.count()
-    const totalJobs = await prisma.searchJob.count()
-    const totalResults = await prisma.searchResult.count()
+async function getStats(productId?: string) {
+    const where = productId ? { productId } : {}
+    const whereResult = productId ? { job: { productId } } : {}
 
-    // Get average price across all results (just a simple metric)
+    const totalProducts = await prisma.product.count() // Total products always global
+    const totalJobs = await prisma.searchJob.count({ where })
+    const totalResults = await prisma.searchResult.count({ where: whereResult })
+
     const avgPriceResult = await prisma.searchResult.aggregate({
-        _avg: { price: true }
+        _avg: { price: true },
+        where: whereResult
     })
 
     return {
@@ -21,8 +27,19 @@ async function getGlobalStats() {
     }
 }
 
-export default async function GlobalAnalyticsPage() {
-    const stats = await getGlobalStats()
+export default async function GlobalAnalyticsPage({ searchParams }: { searchParams: Promise<{ productId?: string }> }) {
+    const { productId } = await searchParams
+    const stats = await getStats(productId)
+
+    // Fetch all products for the filter
+    const products = await prisma.product.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } })
+
+    let analyticsData: { marketShare: any[], priceByMarketplace: any[], topSellers: any[] } = { marketShare: [], priceByMarketplace: [], topSellers: [] }
+    try {
+        analyticsData = await getGlobalAnalyticsData(productId)
+    } catch (e) {
+        console.error('Failed to fetch global analytics:', e)
+    }
 
     return (
         <div>
@@ -32,6 +49,8 @@ export default async function GlobalAnalyticsPage() {
                 </h1>
                 <p style={{ color: '#94a3b8' }}>Visão consolidada de todos os monitoramentos.</p>
             </div>
+
+            <ProductFilter products={products} />
 
             {/* KPI Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
@@ -81,14 +100,11 @@ export default async function GlobalAnalyticsPage() {
                 </div>
             </div>
 
-            {/* Placeholder for more advanced charts */}
-            <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
-                <BarChart3 size={48} color="#334155" style={{ marginBottom: '1rem' }} />
-                <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>Relatórios Avançados em Breve</h3>
-                <p style={{ color: '#94a3b8', maxWidth: '500px', margin: '0 auto' }}>
-                    Estamos processando seus dados para gerar insights de market share, elasticidade de preço e tendências de competidores.
-                </p>
-            </div>
+            <GlobalAnalyticsDashboard
+                marketShare={analyticsData.marketShare}
+                priceByMarketplace={analyticsData.priceByMarketplace}
+                topSellers={analyticsData.topSellers}
+            />
         </div>
     )
 }

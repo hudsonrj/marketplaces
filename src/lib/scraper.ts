@@ -1,11 +1,14 @@
 import { PrismaClient } from '@prisma/client'
 import { chromium } from 'playwright'
-import { analyzeProductMatch } from './ai'
+import { analyzeProductMatch, checkProductDuplication } from './ai'
 
 const prisma = new PrismaClient()
 
+// ... (imports)
+
 export async function runScraper(jobId: string, productName: string) {
     console.log(`Starting scraper for job ${jobId} - Product: ${productName}`)
+    let totalItems = 0
 
     try {
         await prisma.searchJob.update({
@@ -18,7 +21,7 @@ export async function runScraper(jobId: string, productName: string) {
         })
 
         const browser = await chromium.launch({
-            headless: false,
+            headless: false, // Keep headless false for better anti-bot avoidance
             args: [
                 '--disable-blink-features=AutomationControlled',
                 '--no-sandbox',
@@ -56,12 +59,11 @@ export async function runScraper(jobId: string, productName: string) {
                         window.scrollBy(0, distance);
                         totalHeight += distance;
 
-                        // Scroll until we reach the bottom or a maximum limit (e.g., 25000px for ~100 items)
                         if (totalHeight >= scrollHeight || totalHeight > 25000) {
                             clearInterval(timer);
                             resolve();
                         }
-                    }, 100); // Slower scroll to allow lazy loading
+                    }, 100);
                 });
             });
         };
@@ -96,7 +98,7 @@ export async function runScraper(jobId: string, productName: string) {
 
             console.log('Mercado Livre: Scrolling...')
             await autoScroll(page)
-            await page.waitForTimeout(2000) // Wait a bit after scrolling
+            await page.waitForTimeout(2000)
 
             const mlResults = await page.evaluate(() => {
                 const items = document.querySelectorAll('.ui-search-layout__item, .ui-search-result__wrapper, li.ui-search-layout__item')
@@ -158,6 +160,7 @@ export async function runScraper(jobId: string, productName: string) {
             })
 
             console.log(`Mercado Livre: Found ${mlResults.length} items`)
+            totalItems += mlResults.length
 
             for (const res of mlResults) {
                 const searchTerms = productName.toLowerCase().split(' ').filter(w => w.length > 2)
@@ -194,24 +197,35 @@ export async function runScraper(jobId: string, productName: string) {
                     })
                 }
 
-                // Automatic Product Registration
                 if (analysis.newProductCandidate) {
                     const { name, brand, category, description } = analysis.newProductCandidate
 
-                    // Check if product already exists (fuzzy match or exact name)
-                    const existingProduct = await prisma.product.findFirst({
-                        where: { name: { equals: name } } // Simple exact match for now, could be improved
+                    // 1. Keyword search to find potential duplicates efficiently
+                    const keywords = name.split(' ').filter(w => w.length > 3).slice(0, 3)
+                    const potentialMatches = await prisma.product.findMany({
+                        where: {
+                            OR: keywords.map(k => ({ name: { contains: k } }))
+                        },
+                        select: { id: true, name: true }
                     })
 
-                    if (!existingProduct) {
-                        console.log(`New product discovered: ${name}. Registering...`)
+                    // 2. AI Duplication Check
+                    const duplicationCheck = await checkProductDuplication(
+                        { name, description },
+                        potentialMatches
+                    )
+
+                    if (duplicationCheck.isDuplicate) {
+                        console.log(`Duplicate product detected (ML): ${name} matches existing ${duplicationCheck.existingProductId}. Skipping registration.`)
+                    } else {
+                        console.log(`New product discovered (ML): ${name}. Registering...`)
                         await prisma.product.create({
                             data: {
                                 name,
                                 brand,
                                 category,
                                 description,
-                                costPrice: 0, // Default, needs user input later
+                                costPrice: 0,
                                 imageUrl: res.image
                             }
                         })
@@ -289,6 +303,7 @@ export async function runScraper(jobId: string, productName: string) {
             })
 
             console.log(`Amazon: Extracted ${amzResults.length} valid items`)
+            totalItems += amzResults.length
 
             for (const res of amzResults) {
                 const searchTerms = productName.toLowerCase().split(' ').filter(w => w.length > 2)
@@ -324,11 +339,27 @@ export async function runScraper(jobId: string, productName: string) {
                     })
                 }
 
-                // Automatic Product Registration (Amazon)
                 if (analysis.newProductCandidate) {
                     const { name, brand, category, description } = analysis.newProductCandidate
-                    const existingProduct = await prisma.product.findFirst({ where: { name: { equals: name } } })
-                    if (!existingProduct) {
+
+                    // 1. Keyword search to find potential duplicates efficiently
+                    const keywords = name.split(' ').filter(w => w.length > 3).slice(0, 3)
+                    const potentialMatches = await prisma.product.findMany({
+                        where: {
+                            OR: keywords.map(k => ({ name: { contains: k } }))
+                        },
+                        select: { id: true, name: true }
+                    })
+
+                    // 2. AI Duplication Check
+                    const duplicationCheck = await checkProductDuplication(
+                        { name, description },
+                        potentialMatches
+                    )
+
+                    if (duplicationCheck.isDuplicate) {
+                        console.log(`Duplicate product detected (Amazon): ${name} matches existing ${duplicationCheck.existingProductId}. Skipping registration.`)
+                    } else {
                         console.log(`New product discovered (Amazon): ${name}. Registering...`)
                         await prisma.product.create({
                             data: { name, brand, category, description, costPrice: 0, imageUrl: res.image }
@@ -341,11 +372,12 @@ export async function runScraper(jobId: string, productName: string) {
         // Shopee Scraper
         try {
             console.log('Navigating to Shopee...')
-            const shopeeSearchUrl = `https://shopee.com.br/search?keyword=${encodeURIComponent(productName)}&sortBy=price&order=asc`
-            await page.goto(shopeeSearchUrl, { waitUntil: 'domcontentloaded' })
+            // Use the exact URL format requested by the user
+            const shopeeSearchUrl = `https://shopee.com.br/search?keyword=${encodeURIComponent(productName)}&order=asc&page=0&sortBy=price`
+            console.log('Shopee URL:', shopeeSearchUrl)
 
-            console.log('Shopee: Waiting for content...')
-            await page.waitForTimeout(8000) // Increased wait time
+            await page.goto(shopeeSearchUrl, { waitUntil: 'networkidle' }) // Wait for network idle
+            await page.waitForTimeout(5000) // Extra wait
 
             try {
                 const closePopup = await page.locator('.shopee-popup__close-btn').first()
@@ -357,7 +389,7 @@ export async function runScraper(jobId: string, productName: string) {
             await page.waitForTimeout(3000)
 
             const shopeeResults = await page.evaluate(() => {
-                const items = document.querySelectorAll('div.shopee-search-item-result__item')
+                const items = document.querySelectorAll('.shopee-search-item-result__item')
                 const data: any[] = []
 
                 items.forEach((item) => {
@@ -366,20 +398,20 @@ export async function runScraper(jobId: string, productName: string) {
                     const linkElement = item.querySelector('a')
                     const link = linkElement?.getAttribute('href')
 
+                    // Try multiple selectors for title
                     let title = item.querySelector('div[data-sqe="name"] > div')?.textContent?.trim()
+                    if (!title) title = item.querySelector('.Cve6sh')?.textContent?.trim() // Obfuscated class check
                     if (!title) title = linkElement?.textContent?.trim()
 
+                    // Try multiple selectors for price
                     let priceText = item.querySelector('div[data-sqe="name"] + div')?.textContent
+                    if (!priceText) priceText = item.querySelector('.ZEgDH9')?.textContent // Obfuscated class check
                     if (!priceText) priceText = Array.from(item.querySelectorAll('span')).find(el => el.textContent?.includes('R$'))?.textContent
 
                     const image = item.querySelector('img')?.getAttribute('src')
-
                     let location = item.querySelector('.zGGwiV, ._2CWevj, div[data-sqe="location"]')?.textContent?.trim()
-
                     let shipping = 0
-
                     const quantitySold = item.querySelector('div[data-sqe="rating"] + div, .r6HknA')?.textContent?.trim()
-                    const reviewScore = null
 
                     if (title && priceText && link) {
                         const cleanPrice = priceText.replace(/[^\d,]/g, '').replace(',', '.')
@@ -394,7 +426,6 @@ export async function runScraper(jobId: string, productName: string) {
                                 location,
                                 shipping,
                                 quantitySold,
-                                reviewScore,
                                 marketplace: 'SHOPEE'
                             })
                         }
@@ -404,6 +435,8 @@ export async function runScraper(jobId: string, productName: string) {
             })
 
             console.log(`Shopee: Found ${shopeeResults.length} items`)
+            totalItems += shopeeResults.length
+
             if (shopeeResults.length === 0) {
                 console.log('Shopee: No items found. Debugging...')
                 await page.screenshot({ path: 'public/shopee_failed.png' })
@@ -433,7 +466,6 @@ export async function runScraper(jobId: string, productName: string) {
                             imageUrl: res.image,
                             sellerName: res.seller,
                             quantitySold: res.quantitySold,
-                            reviewScore: res.reviewScore,
                             matchScore: analysis.score,
                             matchReasoning: analysis.reasoning,
                             normalizedName: analysis.normalizedName,
@@ -443,14 +475,37 @@ export async function runScraper(jobId: string, productName: string) {
                     })
                 }
 
-                // Automatic Product Registration (Shopee)
                 if (analysis.newProductCandidate) {
                     const { name, brand, category, description } = analysis.newProductCandidate
-                    const existingProduct = await prisma.product.findFirst({ where: { name: { equals: name } } })
-                    if (!existingProduct) {
-                        console.log(`New product discovered (Shopee): ${name}. Registering...`)
+
+                    // 1. Keyword search to find potential duplicates efficiently
+                    const keywords = name.split(' ').filter(w => w.length > 3).slice(0, 3)
+                    const potentialMatches = await prisma.product.findMany({
+                        where: {
+                            OR: keywords.map(k => ({ name: { contains: k } }))
+                        },
+                        select: { id: true, name: true }
+                    })
+
+                    // 2. AI Duplication Check
+                    const duplicationCheck = await checkProductDuplication(
+                        { name, description },
+                        potentialMatches
+                    )
+
+                    if (duplicationCheck.isDuplicate) {
+                        console.log(`Duplicate product detected: ${name} matches existing ${duplicationCheck.existingProductId}. Skipping registration.`)
+                    } else {
+                        console.log(`New product discovered: ${name}. Registering...`)
                         await prisma.product.create({
-                            data: { name, brand, category, description, costPrice: 0, imageUrl: res.image }
+                            data: {
+                                name,
+                                brand,
+                                category,
+                                description,
+                                costPrice: 0,
+                                imageUrl: res.image
+                            }
                         })
                     }
                 }
@@ -465,7 +520,8 @@ export async function runScraper(jobId: string, productName: string) {
             data: { status: 'COMPLETED' }
         })
 
-        console.log(`Job ${jobId} completed.`)
+        console.log(`Job ${jobId} completed. Total items: ${totalItems}`)
+        return totalItems
 
     } catch (error) {
         console.error('Fatal error in scraper:', error)
@@ -473,5 +529,6 @@ export async function runScraper(jobId: string, productName: string) {
             where: { id: jobId },
             data: { status: 'FAILED' }
         })
+        return 0
     }
 }

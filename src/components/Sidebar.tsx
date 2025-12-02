@@ -2,14 +2,15 @@
 
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { LayoutDashboard, ShoppingBag, Search, Settings, BarChart3, Zap } from 'lucide-react'
+import { LayoutDashboard, ShoppingBag, Search, Settings, BarChart3, Zap, Bot } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
     { icon: ShoppingBag, label: 'Produtos', href: '/products' },
     { icon: Search, label: 'Jobs de Busca', href: '/jobs' },
-    { icon: BarChart3, label: 'Analytics', href: '/analytics' }, // Global analytics if we have one, or maybe just a placeholder
+    { icon: BarChart3, label: 'Analytics', href: '/analytics' },
+    { icon: Bot, label: 'Assistente', href: '/assistant' },
     { icon: Settings, label: 'Configurações', href: '/settings' },
 ]
 

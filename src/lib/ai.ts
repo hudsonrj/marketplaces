@@ -78,3 +78,52 @@ export async function analyzeProductMatch(
         return { score: 0, reasoning: 'Error', normalizedName: candidate.title, city: null, state: null }
     }
 }
+
+export async function checkProductDuplication(
+    newProduct: { name: string, description: string },
+    existingProducts: { id: string, name: string }[]
+): Promise<{ isDuplicate: boolean, existingProductId?: string, reasoning: string }> {
+    try {
+        if (existingProducts.length === 0) return { isDuplicate: false, reasoning: 'No existing products to compare.' }
+
+        const prompt = `
+        I have a potential new product to register and a list of existing products in my database.
+        I need to know if this new product is already registered (duplicate) or if it is truly new.
+        
+        New Product Candidate:
+        Name: "${newProduct.name}"
+        Description: "${newProduct.description}"
+        
+        Existing Products List:
+        ${JSON.stringify(existingProducts.map(p => ({ id: p.id, name: p.name })))}
+        
+        Task:
+        Compare the New Product Candidate against the Existing Products List.
+        - Look for semantic equivalence (e.g., "iPhone 13 128GB" is the same as "Apple iPhone 13 128 GB").
+        - Ignore minor differences in casing, spacing, or word order.
+        - If you find a match, return true and the ID of the matching product.
+        
+        Return ONLY a JSON object:
+        {
+            "isDuplicate": boolean,
+            "existingProductId": "string" | null,
+            "reasoning": "string"
+        }
+        `
+
+        const completion = await openai.chat.completions.create({
+            messages: [{ role: "user", content: prompt }],
+            model: "gpt-4o-mini",
+            response_format: { type: "json_object" }
+        })
+
+        const content = completion.choices[0].message.content
+        if (!content) throw new Error('Empty response from OpenAI')
+
+        return JSON.parse(content)
+
+    } catch (error) {
+        console.error('Duplication check failed:', error)
+        return { isDuplicate: false, reasoning: 'Error during check.' }
+    }
+}

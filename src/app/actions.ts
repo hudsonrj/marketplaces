@@ -53,6 +53,14 @@ export async function updateProduct(formData: FormData) {
     redirect('/products')
 }
 
+export async function toggleProductActive(id: string, active: boolean) {
+    await prisma.product.update({
+        where: { id },
+        data: { active }
+    })
+    revalidatePath('/products')
+}
+
 export async function getProducts() {
     return await prisma.product.findMany({
         orderBy: { createdAt: 'desc' }
