@@ -1,11 +1,9 @@
 'use server'
 
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { runScraper } from '@/lib/scraper'
-
-const prisma = new PrismaClient()
 
 export async function createProduct(formData: FormData) {
     const name = formData.get('name') as string

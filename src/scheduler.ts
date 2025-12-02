@@ -1,8 +1,6 @@
 import cron from 'node-cron'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from './lib/prisma'
 import { runScraper } from './lib/scraper'
-
-const prisma = new PrismaClient()
 
 console.log('Scheduler started. Jobs will run at 06:00, 12:00, and 18:00.')
 

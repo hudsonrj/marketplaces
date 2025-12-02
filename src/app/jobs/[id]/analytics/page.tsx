@@ -1,6 +1,6 @@
 
 
-import { PrismaClient } from '@prisma/client'
+
 import Link from 'next/link'
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,

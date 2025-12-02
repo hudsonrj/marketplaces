@@ -1,10 +1,8 @@
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { ArrowLeft, BarChart2, Clock, Package } from 'lucide-react'
 import ProductCharts from './charts'
 import ResultsTable from './results-table'
-
-const prisma = new PrismaClient()
 
 export default async function JobDetailsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params

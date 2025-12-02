@@ -1,10 +1,26 @@
 import OpenAI from 'openai'
+import { prisma } from './prisma'
 
+export async function getAIClient() {
+    const settings = await prisma.settings.findFirst()
 
-const openai = new OpenAI({
-    apiKey: 'sk-hcs-account-y3YVsqfqyNSBM9rRl72yT3BlbkFJB4PKHd3DxOMe1grQS1cp', // User provided key
-    dangerouslyAllowBrowser: true // Only if running on client, but this is server side usually
-})
+    const apiKey = settings?.aiApiKey || process.env.OPENAI_API_KEY || ''
+    const baseURL =
+        settings?.aiProvider === 'openrouter' ? 'https://openrouter.ai/api/v1' :
+            settings?.aiProvider === 'groq' ? 'https://api.groq.com/openai/v1' :
+                settings?.aiProvider === 'deepseek' ? 'https://api.deepseek.com/v1' :
+                    undefined // Default OpenAI
+
+    const model = settings?.aiModel || 'gpt-4o-mini'
+
+    const client = new OpenAI({
+        apiKey: apiKey,
+        baseURL: baseURL,
+        dangerouslyAllowBrowser: true
+    })
+
+    return { client, model }
+}
 
 export async function analyzeProductMatch(
     target: { name: string, description?: string | null },
@@ -22,9 +38,9 @@ export async function analyzeProductMatch(
         description: string;
     } | null
 }> {
-
-
     try {
+        const { client, model } = await getAIClient()
+
         const prompt = `
         Analyze the following product offer against the target product.
         
@@ -62,9 +78,9 @@ export async function analyzeProductMatch(
         }
         `
 
-        const completion = await openai.chat.completions.create({
+        const completion = await client.chat.completions.create({
             messages: [{ role: "user", content: prompt }],
-            model: "gpt-4o-mini",
+            model: model,
             response_format: { type: "json_object" }
         })
 
@@ -85,6 +101,8 @@ export async function checkProductDuplication(
 ): Promise<{ isDuplicate: boolean, existingProductId?: string, reasoning: string }> {
     try {
         if (existingProducts.length === 0) return { isDuplicate: false, reasoning: 'No existing products to compare.' }
+
+        const { client, model } = await getAIClient()
 
         const prompt = `
         I have a potential new product to register and a list of existing products in my database.
@@ -111,9 +129,9 @@ export async function checkProductDuplication(
         }
         `
 
-        const completion = await openai.chat.completions.create({
+        const completion = await client.chat.completions.create({
             messages: [{ role: "user", content: prompt }],
-            model: "gpt-4o-mini",
+            model: model,
             response_format: { type: "json_object" }
         })
 

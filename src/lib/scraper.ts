@@ -1,8 +1,6 @@
-import { PrismaClient } from '@prisma/client'
+import { prisma } from './prisma'
 import { chromium } from 'playwright'
 import { analyzeProductMatch, checkProductDuplication } from './ai'
-
-const prisma = new PrismaClient()
 
 // ... (imports)
 
@@ -514,6 +512,25 @@ export async function runScraper(jobId: string, productName: string) {
         } catch (e) { console.error('Error scraping Shopee:', e) }
 
         await browser.close()
+
+        // Calculate best price found in this job
+        const bestResult = await prisma.searchResult.findFirst({
+            where: {
+                jobId: jobId,
+                matchScore: { gt: 50 }
+            },
+            orderBy: { price: 'asc' }
+        })
+
+        if (bestResult) {
+            await prisma.product.update({
+                where: { id: product?.id },
+                data: {
+                    lastBestPrice: bestResult.price,
+                    lastBestPriceDate: new Date()
+                }
+            })
+        }
 
         await prisma.searchJob.update({
             where: { id: jobId },

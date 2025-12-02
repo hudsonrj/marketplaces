@@ -1,21 +1,54 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { backupDatabase, listBackups, restoreDatabase } from './actions'
-import { Save, RotateCcw, Database, Check, AlertTriangle } from 'lucide-react'
+import { backupDatabase, listBackups, restoreDatabase, getSettings, updateSettings } from './actions'
+import { Save, RotateCcw, Database, Check, AlertTriangle, Bot } from 'lucide-react'
 
 export default function SettingsPage() {
     const [backups, setBackups] = useState<string[]>([])
     const [loading, setLoading] = useState(false)
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
+    // AI Settings State
+    const [aiSettings, setAiSettings] = useState({
+        aiProvider: 'openai',
+        aiModel: 'gpt-4o-mini',
+        aiApiKey: ''
+    })
+
     useEffect(() => {
         loadBackups()
+        loadSettings()
     }, [])
+
+    const loadSettings = async () => {
+        const settings = await getSettings()
+        if (settings) {
+            setAiSettings({
+                aiProvider: settings.aiProvider,
+                aiModel: settings.aiModel,
+                aiApiKey: settings.aiApiKey
+            })
+        }
+    }
 
     const loadBackups = async () => {
         const list = await listBackups()
         setBackups(list)
+    }
+
+    const handleSaveSettings = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setLoading(true)
+        setMessage(null)
+
+        const res = await updateSettings(aiSettings)
+        if (res.success) {
+            setMessage({ type: 'success', text: res.message })
+        } else {
+            setMessage({ type: 'error', text: res.message })
+        }
+        setLoading(false)
     }
 
     const handleBackup = async () => {
@@ -39,7 +72,6 @@ export default function SettingsPage() {
         const res = await restoreDatabase(filename)
         if (res.success) {
             setMessage({ type: 'success', text: res.message })
-            // Force reload to pick up new DB connection state if needed, though usually file swap works in SQLite
             window.location.reload()
         } else {
             setMessage({ type: 'error', text: res.message })
@@ -56,6 +88,86 @@ export default function SettingsPage() {
                 <p style={{ color: '#94a3b8' }}>Gerencie o sistema e seus dados.</p>
             </div>
 
+            {message && (
+                <div style={{
+                    padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem',
+                    background: message.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                    color: message.type === 'success' ? '#10b981' : '#ef4444',
+                    display: 'flex', alignItems: 'center', gap: '0.5rem'
+                }}>
+                    {message.type === 'success' ? <Check size={18} /> : <AlertTriangle size={18} />}
+                    {message.text}
+                </div>
+            )}
+
+            {/* AI Settings Section */}
+            <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                    <div style={{ padding: '0.75rem', borderRadius: '12px', background: 'rgba(139, 92, 246, 0.1)' }}>
+                        <Bot size={24} color="#8b5cf6" />
+                    </div>
+                    <div>
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: '600', color: 'white' }}>Inteligência Artificial</h3>
+                        <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Configure o provedor de IA para o assistente e análises.</p>
+                    </div>
+                </div>
+
+                <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div>
+                        <label style={{ display: 'block', color: '#e2e8f0', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Provedor</label>
+                        <select
+                            value={aiSettings.aiProvider}
+                            onChange={e => setAiSettings({ ...aiSettings, aiProvider: e.target.value })}
+                            style={{
+                                width: '100%', padding: '0.75rem', borderRadius: '8px',
+                                background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)',
+                                color: 'white', outline: 'none'
+                            }}
+                        >
+                            <option value="openai">OpenAI</option>
+                            <option value="groq">Groq</option>
+                            <option value="openrouter">OpenRouter</option>
+                            <option value="deepseek">DeepSeek</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'block', color: '#e2e8f0', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Modelo</label>
+                        <input
+                            type="text"
+                            value={aiSettings.aiModel}
+                            onChange={e => setAiSettings({ ...aiSettings, aiModel: e.target.value })}
+                            placeholder="Ex: gpt-4o-mini, llama3-70b-8192"
+                            style={{
+                                width: '100%', padding: '0.75rem', borderRadius: '8px',
+                                background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)',
+                                color: 'white', outline: 'none'
+                            }}
+                        />
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'block', color: '#e2e8f0', marginBottom: '0.5rem', fontSize: '0.875rem' }}>API Key</label>
+                        <input
+                            type="password"
+                            value={aiSettings.aiApiKey}
+                            onChange={e => setAiSettings({ ...aiSettings, aiApiKey: e.target.value })}
+                            placeholder="sk-..."
+                            style={{
+                                width: '100%', padding: '0.75rem', borderRadius: '8px',
+                                background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)',
+                                color: 'white', outline: 'none'
+                            }}
+                        />
+                    </div>
+
+                    <button type="submit" disabled={loading} className="btn-primary" style={{ alignSelf: 'flex-end' }}>
+                        <Save size={18} />
+                        Salvar Configurações
+                    </button>
+                </form>
+            </div>
+
             <div className="glass-panel" style={{ padding: '2rem', marginBottom: '2rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
                     <div style={{ padding: '0.75rem', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.1)' }}>
@@ -66,18 +178,6 @@ export default function SettingsPage() {
                         <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Gerencie cópias de segurança do banco de dados SQLite.</p>
                     </div>
                 </div>
-
-                {message && (
-                    <div style={{
-                        padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem',
-                        background: message.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                        color: message.type === 'success' ? '#10b981' : '#ef4444',
-                        display: 'flex', alignItems: 'center', gap: '0.5rem'
-                    }}>
-                        {message.type === 'success' ? <Check size={18} /> : <AlertTriangle size={18} />}
-                        {message.text}
-                    </div>
-                )}
 
                 <button
                     onClick={handleBackup}

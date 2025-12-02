@@ -1,10 +1,8 @@
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import AnalyticsDashboard from '@/app/jobs/[id]/analytics/dashboard'
 import { getProductPriceHistory } from '@/lib/duckdb'
-
-const prisma = new PrismaClient()
 
 export default async function ProductAnalyticsPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params

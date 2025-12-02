@@ -50,3 +50,42 @@ export async function restoreDatabase(filename: string) {
         return { success: false, message: 'Falha ao restaurar backup.' }
     }
 }
+
+import { prisma } from '@/lib/prisma'
+
+export async function getSettings() {
+    try {
+        const settings = await prisma.settings.findFirst()
+        if (!settings) {
+            return await prisma.settings.create({
+                data: {
+                    aiProvider: 'openai',
+                    aiModel: 'gpt-4o-mini',
+                    aiApiKey: ''
+                }
+            })
+        }
+        return settings
+    } catch (error) {
+        console.error('Failed to get settings:', error)
+        return null
+    }
+}
+
+export async function updateSettings(data: { aiProvider: string, aiModel: string, aiApiKey: string }) {
+    try {
+        const settings = await prisma.settings.findFirst()
+        if (settings) {
+            await prisma.settings.update({
+                where: { id: settings.id },
+                data
+            })
+        } else {
+            await prisma.settings.create({ data })
+        }
+        return { success: true, message: 'Configurações salvas com sucesso.' }
+    } catch (error) {
+        console.error('Failed to update settings:', error)
+        return { success: false, message: 'Erro ao salvar configurações.' }
+    }
+}

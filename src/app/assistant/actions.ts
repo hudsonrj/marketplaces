@@ -1,17 +1,14 @@
 'use server'
 
-import { PrismaClient } from '@prisma/client'
-import OpenAI from 'openai'
+import { prisma } from '@/lib/prisma'
 import { runScraper } from '@/lib/scraper'
-
-const prisma = new PrismaClient()
-const openai = new OpenAI({
-    apiKey: 'sk-hcs-account-y3YVsqfqyNSBM9rRl72yT3BlbkFJB4PKHd3DxOMe1grQS1cp',
-    dangerouslyAllowBrowser: true
-})
+import { getAIClient, checkProductDuplication } from '@/lib/ai'
+import { exploreProductLink } from '@/lib/explorer'
 
 export async function askAssistant(query: string, history: { role: 'user' | 'assistant', content: string }[] = []) {
     try {
+        const { client, model } = await getAIClient()
+
         // 1. Convert natural language to Prisma query intent using OpenAI
         const prompt = `
         You are a database assistant for a product marketplace monitoring system.
@@ -34,10 +31,11 @@ export async function askAssistant(query: string, history: { role: 'user' | 'ass
         - "find_results": Filter search results by price, marketplace, city, state, product name.
         - "count_results": Count results matching criteria.
         - "trigger_search": User wants to find prices for a product that might not be tracked yet, or wants a fresh search.
+        - "explore_offer": User wants more details about a specific link or product offer mentioned in context.
         
         Return JSON format:
         {
-            "intent": "find_results" | "find_products" | "count_results" | "trigger_search",
+            "intent": "find_results" | "find_products" | "count_results" | "trigger_search" | "explore_offer",
             "filters": {
                 "productName": string (optional),
                 "minPrice": number (optional),
@@ -45,8 +43,10 @@ export async function askAssistant(query: string, history: { role: 'user' | 'ass
                 "marketplace": string (optional),
                 "city": string (optional),
                 "state": string (optional),
-                "active": boolean (optional)
+                "active": boolean (optional),
+                "link": string (optional, for explore_offer)
             },
+            "question": string (optional, for explore_offer, specific question about the link),
             "limit": number (optional, default 10)
         }
         `
@@ -57,9 +57,9 @@ export async function askAssistant(query: string, history: { role: 'user' | 'ass
             { role: "user", content: query }
         ]
 
-        const completion = await openai.chat.completions.create({
+        const completion = await client.chat.completions.create({
             messages: messages,
-            model: "gpt-4o-mini",
+            model: model,
             response_format: { type: "json_object" }
         })
 
@@ -70,38 +70,63 @@ export async function askAssistant(query: string, history: { role: 'user' | 'ass
         let data: any = null
         let message = ''
 
-        if (intent.intent === 'trigger_search') {
+        if (intent.intent === 'explore_offer' && intent.filters?.link) {
+            const result = await exploreProductLink(intent.filters.link, intent.question || query)
+            message = result || 'Não foi possível analisar o link fornecido.'
+        }
+        else if (intent.intent === 'trigger_search') {
             const productName = intent.filters.productName || query
 
-            // 1. Find or Create Product
-            let product = await prisma.product.findFirst({
-                where: { name: { contains: productName } }
+            // 1. Find potential duplicates using keyword search
+            const keywords = productName.split(' ').filter((w: string) => w.length > 3).slice(0, 3)
+            const potentialMatches = await prisma.product.findMany({
+                where: {
+                    OR: keywords.map((k: string) => ({ name: { contains: k } }))
+                },
+                select: { id: true, name: true }
             })
 
-            if (!product) {
-                product = await prisma.product.create({
+            let productId: string | null = null
+
+            // 2. AI Duplication Check
+            if (potentialMatches.length > 0) {
+                const duplicationCheck = await checkProductDuplication(
+                    { name: productName, description: '' },
+                    potentialMatches
+                )
+                if (duplicationCheck.isDuplicate && duplicationCheck.existingProductId) {
+                    productId = duplicationCheck.existingProductId
+                    const existing = potentialMatches.find(p => p.id === productId)
+                    message = `Encontrei um produto existente: "${existing?.name}". Iniciando nova busca para ele. `
+                }
+            }
+
+            // 3. Create if not found
+            if (!productId) {
+                const product = await prisma.product.create({
                     data: {
                         name: productName,
                         costPrice: 0,
                         active: true
                     }
                 })
+                productId = product.id
                 message = `Produto "${productName}" cadastrado com sucesso. `
             }
 
-            // 2. Create Job
+            // 4. Create Job
             const job = await prisma.searchJob.create({
                 data: {
-                    productId: product.id,
+                    productId: productId!,
                     status: 'PENDING'
                 }
             })
 
-            // 3. Trigger Scraper (Async)
+            // 5. Trigger Scraper (Async)
             try {
                 // We don't await this fully to avoid blocking the UI, but we trigger it.
-                runScraper(job.id, product.name).catch((e: any) => console.error('Async scraper error:', e))
-                message += `Iniciei uma busca por "${product.name}". Isso pode levar alguns minutos. Você pode acompanhar em 'Jobs' ou aguardar.`
+                runScraper(job.id, productName).catch((e: any) => console.error('Async scraper error:', e))
+                message += `Iniciei uma busca. Isso pode levar alguns minutos. Você pode acompanhar em 'Jobs' ou aguardar.`
             } catch (e) {
                 console.error('Failed to trigger scraper:', e)
                 message += `Erro ao iniciar o scraper: ${e}`
@@ -128,7 +153,7 @@ export async function askAssistant(query: string, history: { role: 'user' | 'ass
             if (intent.filters.city) where.city = { contains: intent.filters.city }
             if (intent.filters.state) where.state = { contains: intent.filters.state }
             if (intent.filters.productName) {
-                // Try to find product ID first to be more precise, or search by title
+                // Try to find product ID first to be more precise
                 const products = await prisma.product.findMany({
                     where: { name: { contains: intent.filters.productName } },
                     select: { id: true }
@@ -142,18 +167,37 @@ export async function askAssistant(query: string, history: { role: 'user' | 'ass
                         select: { id: true }
                     })
                     const jobIds = jobs.map(j => j.id)
-                    where.jobId = { in: jobIds }
+
+                    if (jobIds.length > 0) {
+                        where.jobId = { in: jobIds }
+                    } else {
+                        // Fallback: search by title if no jobs found for product
+                        where.title = { contains: intent.filters.productName }
+                    }
                 } else {
                     where.title = { contains: intent.filters.productName }
                 }
             }
 
-            data = await prisma.searchResult.findMany({
+            // Fallback: if no results found with high match score, try without it
+            let results = await prisma.searchResult.findMany({
                 where,
                 orderBy: { price: 'asc' },
                 take: intent.limit || 10,
                 select: { title: true, price: true, marketplace: true, link: true, city: true, state: true }
             })
+
+            if (results.length === 0 && where.matchScore) {
+                delete where.matchScore
+                results = await prisma.searchResult.findMany({
+                    where,
+                    orderBy: { price: 'asc' },
+                    take: intent.limit || 10,
+                    select: { title: true, price: true, marketplace: true, link: true, city: true, state: true }
+                })
+            }
+
+            data = results
             message = `Encontrei ${data.length} ofertas.`
         }
 

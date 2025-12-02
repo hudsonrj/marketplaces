@@ -21,6 +21,8 @@ model Product {
   active      Boolean  @default(true)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
+  lastBestPrice Decimal? @map("last_best_price")
+  lastBestPriceDate DateTime? @map("last_best_price_date")
 
   searchJobs  SearchJob[]
 }
@@ -59,4 +61,12 @@ model SearchResult {
   collectedAt    DateTime @default(now()) @map("collected_at")
 
   job            SearchJob @relation(fields: [jobId], references: [id])
+}
+
+model Settings {
+  id          String   @id @default(uuid())
+  aiProvider  String   @default("openai") // openai, groq, openrouter, deepseek
+  aiModel     String   @default("gpt-4o-mini")
+  aiApiKey    String   @default("")
+  updatedAt   DateTime @updatedAt
 }

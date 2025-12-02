@@ -1,30 +1,14 @@
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import Link from 'next/link'
 import { Plus, Edit, Trash2, Search, TrendingUp, Power, PowerOff } from 'lucide-react'
 import { revalidatePath } from 'next/cache'
 import { createSearchJob, toggleProductActive } from '../actions'
 
-const prisma = new PrismaClient()
-
 async function getProducts() {
-    const products = await prisma.product.findMany({
+    return await prisma.product.findMany({
         orderBy: { updatedAt: 'desc' },
-        include: { _count: { select: { searchJobs: true } } }
-    })
-
-    const minPrices = await prisma.$queryRaw`
-        SELECT j.product_id as productId, MIN(r.price) as minPrice
-        FROM SearchJob j
-        JOIN SearchResult r ON j.id = r.job_id
-        WHERE r.match_score > 50
-        GROUP BY j.product_id
-    ` as { productId: string, minPrice: number }[]
-
-    return products.map(p => {
-        const mp = minPrices.find((m: any) => m.productId === p.id)
-        return {
-            ...p,
-            minPrice: mp ? mp.minPrice : null
+        include: {
+            _count: { select: { searchJobs: true } }
         }
     })
 }
@@ -84,8 +68,17 @@ export default async function ProductsPage() {
                                     </form>
                                 </td>
                                 <td style={{ padding: '1rem', fontWeight: '500' }}>{product.name}</td>
-                                <td style={{ padding: '1rem', color: product.minPrice ? '#10b981' : '#94a3b8' }}>
-                                    {product.minPrice ? `R$ ${Number(product.minPrice).toFixed(2)}` : '-'}
+                                <td style={{ padding: '1rem', color: product.lastBestPrice ? '#10b981' : '#94a3b8' }}>
+                                    {product.lastBestPrice ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span>R$ {Number(product.lastBestPrice).toFixed(2)}</span>
+                                            {product.lastBestPriceDate && (
+                                                <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                                    {new Date(product.lastBestPriceDate).toLocaleDateString('pt-BR')}
+                                                </span>
+                                            )}
+                                        </div>
+                                    ) : '-'}
                                 </td>
                                 <td style={{ padding: '1rem' }}>
                                     <span style={{ padding: '0.25rem 0.75rem', borderRadius: '20px', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', fontSize: '0.75rem', fontWeight: '600' }}>
