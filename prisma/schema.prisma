@@ -1,0 +1,61 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  costPrice   Decimal  @map("cost_price")
+  weight      Float?
+  dimensions  String?
+  originCep   String?  @map("origin_cep")
+  category    String?
+  brand       String?
+  imageUrl    String?  @map("image_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  searchJobs  SearchJob[]
+}
+
+model SearchJob {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  status    String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  product   Product  @relation(fields: [productId], references: [id])
+  results   SearchResult[]
+}
+
+model SearchResult {
+  id             String   @id @default(uuid())
+  jobId          String   @map("job_id")
+  marketplace    String
+  title          String
+  price          Decimal
+  shipping       Decimal?
+  link           String
+  sellerName     String?  @map("seller_name")
+  sellerLocation String?  @map("seller_location")
+  sellerRating   String?  @map("seller_rating")
+  imageUrl       String?  @map("image_url")
+  matchScore     Int?     @map("match_score")
+  matchReasoning String?  @map("match_reasoning")
+  normalizedName String?  @map("normalized_name")
+  city           String?
+  state          String?
+  installments   String?
+  quantitySold   String?  @map("quantity_sold")
+  reviewScore    String?  @map("review_score")
+  collectedAt    DateTime @default(now()) @map("collected_at")
+
+  job            SearchJob @relation(fields: [jobId], references: [id])
+}
