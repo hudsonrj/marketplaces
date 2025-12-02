@@ -9,24 +9,42 @@ Este é um sistema avançado de **Inteligência de Preços e Monitoramento de Ma
 *   **Status Ativo/Inativo**: Controle quais produtos devem ser monitorados pelos agentes.
 *   **Visão Geral**: Tabela com indicadores rápidos como "Melhor Preço Recente" e contagem de buscas realizadas.
 
-### 2. Agentes de Coleta (Scrapers)
-O sistema utiliza o **Playwright** para navegar como um usuário real, superando barreiras comuns de automação.
-*   **Multi-Marketplace**:
-    *   🟡 **Mercado Livre**: Busca inteligente com ordenação por menor preço, extração de frete, vendedor e localização.
-    *   ⚫ **Amazon**: Coleta robusta com detecção de CAPTCHA e extração de detalhes de entrega e parcelamento.
-    *   🟠 **Shopee**: Navegação capaz de lidar com popups e carregamento dinâmico de produtos.
-*   **Anti-Bot & Stealth**: Implementação de técnicas para evitar bloqueios, como User-Agents rotativos, delays humanizados e rolagem de página natural.
+### 2. Marketplaces Suportados
+O sistema suporta nativamente os maiores e-commerces do Brasil:
+*   🟡 **Mercado Livre**: Busca inteligente com ordenação por menor preço, extração de frete, vendedor e localização.
+*   ⚫ **Amazon**: Coleta robusta com detecção de CAPTCHA e extração de detalhes de entrega e parcelamento.
+*   🟠 **Shopee**: Navegação capaz de lidar com popups e carregamento dinâmico de produtos.
 
-### 3. Inteligência Artificial (AI Core)
-A "cérebro" da aplicação utiliza modelos de linguagem (OpenAI GPT-4o, Groq Llama 3, etc.) para processar os dados brutos.
-*   **Análise de Correspondência (Match Analysis)**: Cada oferta coletada é analisada pela IA para determinar se corresponde exatamente ao produto alvo.
-    *   Gera um **Score de Confiança (0-100)**.
-    *   Normaliza nomes de produtos.
-    *   Extrai dados geográficos (Cidade/Estado) de textos não estruturados.
-*   **Detecção de Duplicidade**: Ao encontrar novos produtos potenciais, a IA verifica semanticamente se eles já existem no banco de dados para evitar cadastros repetidos.
-*   **Provedores Configuráveis**: Suporte para **OpenAI**, **Groq**, **OpenRouter** e **DeepSeek**, configuráveis via interface.
+### 3. Inteligência Artificial (AI Core) & Enriquecimento de Dados
+A "cérebro" da aplicação utiliza modelos de linguagem (LLMs) para transformar dados brutos e não estruturados da web em informações precisas e acionáveis.
 
-### 4. Analytics e Dados
+#### 🧠 Como a IA Refina os Dados
+O processo de enriquecimento ocorre em etapas para cada oferta encontrada:
+
+1.  **Análise Semântica (Match Analysis)**:
+    *   O scraper envia o título bruto (ex: "Iphone 13 128gb vitrine") e o preço.
+    *   A IA compara com o produto alvo (ex: "iPhone 13 128GB Novo") e gera um **Match Score (0-100)**.
+    *   **Raciocínio**: A IA fornece uma explicação textual do porquê aquele produto é ou não uma correspondência (ex: "Score 20: O produto encontrado é usado/vitrine, enquanto o alvo é novo").
+
+2.  **Normalização e Extração**:
+    *   **Nomes**: Transforma títulos longos de SEO (ex: "Smartphone Apple iPhone 13 128gb Tela 6.1 Câmera Dupla...") em nomes canônicos limpos (ex: "iPhone 13 128GB").
+    *   **Geolocalização**: Extrai Cidade e Estado de strings de localização sujas (ex: "Enviado de Vila Mariana, SP" -> City: "São Paulo", State: "SP").
+
+3.  **Descoberta de Novos Produtos**:
+    *   Se o agente encontra um produto que é válido mas diferente do alvo (ex: um "iPhone 14" enquanto buscava o "13"), a IA o identifica como um **Candidato a Novo Produto**.
+    *   **Verificação de Duplicidade**: Antes de cadastrar, uma segunda camada de IA compara semanticamente este candidato com *todos* os produtos já existentes no banco, evitando duplicatas (ex: reconhece que "Galaxy S23" é o mesmo que "Samsung S23 5G").
+
+### 4. Agentes Autônomos (Scrapers)
+Os agentes não são simples scripts de requisição HTTP; são navegadores completos controlados via código.
+
+*   **Navegação Humanizada**: Simulam comportamento humano com rolagens de página (scroll), movimentos de mouse e tempos de espera aleatórios para evitar detecção por sistemas anti-bot.
+*   **Resiliência**:
+    *   **Shopee**: Lida com popups de marketing e carregamento infinito (infinite scroll).
+    *   **Amazon**: Detecta CAPTCHAs e tenta contornar ou alertar.
+    *   **Mercado Livre**: Navega por filtros de "Menor Preço" e ignora anúncios patrocinados irrelevantes.
+*   **Isolamento**: Cada Job roda em um contexto de navegador isolado (incognito), garantindo que cookies ou sessões anteriores não interfiram nos preços exibidos.
+
+### 5. Analytics e Dados
 *   **Dashboard de Evolução**: Gráficos interativos (Recharts) mostrando o histórico de preços (Mínimo e Médio) ao longo do tempo.
 *   **DuckDB Integration**: Utiliza DuckDB para processamento analítico de alta performance dos dados históricos.
 *   **Histórico de Jobs**: Registro completo de todas as buscas realizadas, com status e resultados detalhados.
