@@ -4,7 +4,7 @@ import { analyzeProductMatch, checkProductDuplication } from './ai'
 
 // ... (imports)
 
-export async function runScraper(jobId: string, productName: string) {
+export async function runScraper(jobId: string, productName: string, options?: { category?: string, instructions?: string, marketplaces?: string[] }) {
     console.log(`Starting scraper for job ${jobId} - Product: ${productName}`)
     let totalItems = 0
 
@@ -19,7 +19,8 @@ export async function runScraper(jobId: string, productName: string) {
         })
 
         const browser = await chromium.launch({
-            headless: false,
+            headless: true, // User requested background, so headless true is better, but let's keep it false for debugging if needed or make it configurable. 
+            // Actually, for "background" jobs initiated by user, headless=true is standard.
             args: [
                 '--disable-blink-features=AutomationControlled',
                 '--no-sandbox',
@@ -66,73 +67,69 @@ export async function runScraper(jobId: string, productName: string) {
         // Define scraper tasks
         const scrapeMercadoLivre = async () => {
             const page = await context.newPage()
+            let allData: any[] = []
             try {
                 console.log('Navigating to Mercado Livre...')
-                await page.goto('https://www.mercadolivre.com.br')
-                await page.waitForTimeout(2000)
-                await page.fill('input.nav-search-input', productName)
-                await page.press('input.nav-search-input', 'Enter')
+                // Construct URL with sorting directly if possible
+                const searchQuery = options?.category ? `${productName} ${options.category}` : productName
+                await page.goto(`https://lista.mercadolivre.com.br/${encodeURIComponent(searchQuery)}_OrderId_PRICE_ASC`, { waitUntil: 'domcontentloaded' })
 
-                try { await page.waitForSelector('.ui-search-layout', { timeout: 5000 }) } catch { }
+                // Pagination Loop
+                while (allData.length < 100) {
+                    await autoScroll(page)
 
-                // Sort by Lowest Price
-                try {
-                    const currentUrl = page.url()
-                    if (!currentUrl.includes('_OrderId_PRICE_ASC')) {
-                        const sortTrigger = await page.$('button.ui-search-sort-filter__trigger, button.andes-dropdown__trigger')
-                        if (sortTrigger) {
-                            await sortTrigger.click()
-                            await page.waitForTimeout(500)
-                            const priceAscOption = await page.$('li.ui-search-sort-filter__item--price-asc a, a.andes-list__item-action[href*="price-asc"]')
-                            if (priceAscOption) {
-                                await priceAscOption.click()
-                                await page.waitForTimeout(2000)
+                    const pageResults = await page.evaluate(() => {
+                        const items = document.querySelectorAll('.ui-search-layout__item, .ui-search-result__wrapper, li.ui-search-layout__item')
+                        const data: any[] = []
+                        items.forEach((item) => {
+                            const title = item.querySelector('.ui-search-item__title, .poly-component__title')?.textContent?.trim()
+
+                            let priceText = item.querySelector('.ui-search-price__part-without-discount .andes-money-amount__fraction')?.textContent
+                            if (!priceText) priceText = item.querySelector('.andes-money-amount__fraction')?.textContent
+                            if (!priceText) priceText = item.querySelector('.poly-price__current .andes-money-amount__fraction')?.textContent
+
+                            const link = item.querySelector('a.ui-search-link, a.poly-component__title')?.getAttribute('href')
+                            let image = item.querySelector('img.ui-search-result-image__element')?.getAttribute('src')
+                            if (!image) image = item.querySelector('img.poly-component__picture')?.getAttribute('src')
+
+                            let location = item.querySelector('.ui-search-item__location, .poly-component__location')?.textContent?.trim()
+                            let seller = item.querySelector('.ui-search-official-store-label, .poly-component__seller')?.textContent?.trim()
+                            if (seller && seller.startsWith('por ')) seller = seller.replace('por ', '')
+
+                            if (title && priceText && link) {
+                                data.push({
+                                    title,
+                                    price: parseFloat(priceText.replace('.', '').replace(',', '.')),
+                                    link,
+                                    image,
+                                    location,
+                                    seller,
+                                    marketplace: 'MERCADO_LIVRE'
+                                })
                             }
-                        }
-                    }
-                } catch (e) { }
-
-                await autoScroll(page)
-
-                const mlResults = await page.evaluate(() => {
-                    const items = document.querySelectorAll('.ui-search-layout__item, .ui-search-result__wrapper, li.ui-search-layout__item')
-                    const data: any[] = []
-                    items.forEach((item) => {
-                        if (data.length >= 50) return // Limit to 50 for speed
-                        const title = item.querySelector('.ui-search-item__title, .poly-component__title')?.textContent?.trim()
-
-                        let priceText = item.querySelector('.ui-search-price__part-without-discount .andes-money-amount__fraction')?.textContent
-                        if (!priceText) priceText = item.querySelector('.andes-money-amount__fraction')?.textContent
-                        if (!priceText) priceText = item.querySelector('.poly-price__current .andes-money-amount__fraction')?.textContent
-
-                        const link = item.querySelector('a.ui-search-link, a.poly-component__title')?.getAttribute('href')
-                        let image = item.querySelector('img.ui-search-result-image__element')?.getAttribute('src')
-                        if (!image) image = item.querySelector('img.poly-component__picture')?.getAttribute('src')
-
-                        let location = item.querySelector('.ui-search-item__location, .poly-component__location')?.textContent?.trim()
-                        let seller = item.querySelector('.ui-search-official-store-label, .poly-component__seller')?.textContent?.trim()
-                        if (seller && seller.startsWith('por ')) seller = seller.replace('por ', '')
-
-                        if (title && priceText && link) {
-                            data.push({
-                                title,
-                                price: parseFloat(priceText.replace('.', '').replace(',', '.')),
-                                link,
-                                image,
-                                location,
-                                seller,
-                                marketplace: 'MERCADO_LIVRE'
-                            })
-                        }
+                        })
+                        return data
                     })
-                    return data
-                })
 
-                console.log(`Mercado Livre: Found ${mlResults.length} items`)
-                return mlResults
+                    allData = [...allData, ...pageResults]
+                    console.log(`Mercado Livre: Found ${allData.length} items so far`)
+
+                    if (allData.length >= 100) break
+
+                    // Next Page
+                    const nextButton = await page.$('a.andes-pagination__link[title="Seguinte"], li.andes-pagination__button--next a')
+                    if (nextButton) {
+                        await nextButton.click()
+                        await page.waitForTimeout(2000)
+                    } else {
+                        break // No more pages
+                    }
+                }
+
+                return allData.slice(0, 100)
             } catch (e) {
                 console.error('Error scraping Mercado Livre:', e)
-                return []
+                return allData
             } finally {
                 await page.close()
             }
@@ -140,43 +137,62 @@ export async function runScraper(jobId: string, productName: string) {
 
         const scrapeAmazon = async () => {
             const page = await context.newPage()
+            let allData: any[] = []
             try {
                 console.log('Navigating to Amazon...')
-                const amazonSearchUrl = `https://www.amazon.com.br/s?k=${encodeURIComponent(productName)}&s=price-asc-rank`
+                const searchQuery = options?.category ? `${productName} ${options.category}` : productName
+                // s=price-asc-rank sorts by price low to high
+                const amazonSearchUrl = `https://www.amazon.com.br/s?k=${encodeURIComponent(searchQuery)}&s=price-asc-rank`
                 await page.goto(amazonSearchUrl, { waitUntil: 'domcontentloaded' })
-                await autoScroll(page)
 
-                const amzResults = await page.evaluate(() => {
-                    const items = document.querySelectorAll('div[data-asin]:not([data-asin=""])')
-                    const data: any[] = []
-                    items.forEach((item) => {
-                        if (data.length >= 50) return
-                        const title = item.querySelector('h2 span, span.a-text-normal')?.textContent?.trim()
-                        const priceWhole = item.querySelector('.a-price-whole')?.textContent
-                        const priceFraction = item.querySelector('.a-price-fraction')?.textContent
-                        const linkElement = item.querySelector('h2 a, a.a-link-normal')
-                        const link = linkElement?.getAttribute('href')
-                        const image = item.querySelector('.s-image')?.getAttribute('src')
+                while (allData.length < 100) {
+                    await autoScroll(page)
 
-                        if (title && priceWhole && link) {
-                            const price = parseFloat(`${priceWhole.replace(/\./g, '').replace(',', '')}.${priceFraction || '00'}`)
-                            data.push({
-                                title,
-                                price,
-                                link: link.startsWith('http') ? link : `https://www.amazon.com.br${link}`,
-                                image,
-                                marketplace: 'AMAZON'
-                            })
-                        }
+                    const pageResults = await page.evaluate(() => {
+                        const items = document.querySelectorAll('div[data-asin]:not([data-asin=""])')
+                        const data: any[] = []
+                        items.forEach((item) => {
+                            const title = item.querySelector('h2 span, span.a-text-normal')?.textContent?.trim()
+                            const priceWhole = item.querySelector('.a-price-whole')?.textContent
+                            const priceFraction = item.querySelector('.a-price-fraction')?.textContent
+                            const linkElement = item.querySelector('h2 a, a.a-link-normal')
+                            const link = linkElement?.getAttribute('href')
+                            const image = item.querySelector('.s-image')?.getAttribute('src')
+
+                            if (title && priceWhole && link) {
+                                const price = parseFloat(`${priceWhole.replace(/\./g, '').replace(',', '')}.${priceFraction || '00'}`)
+                                data.push({
+                                    title,
+                                    price,
+                                    link: link.startsWith('http') ? link : `https://www.amazon.com.br${link}`,
+                                    image,
+                                    marketplace: 'AMAZON'
+                                })
+                            }
+                        })
+                        return data
                     })
-                    return data
-                })
 
-                console.log(`Amazon: Found ${amzResults.length} items`)
-                return amzResults
+                    allData = [...allData, ...pageResults]
+                    console.log(`Amazon: Found ${allData.length} items so far`)
+
+                    if (allData.length >= 100) break
+
+                    // Next Page
+                    const nextButton = await page.$('a.s-pagination-next')
+                    if (nextButton) {
+                        const isDisabled = await nextButton.getAttribute('aria-disabled')
+                        if (isDisabled === 'true') break
+                        await nextButton.click()
+                        await page.waitForTimeout(2000)
+                    } else {
+                        break
+                    }
+                }
+                return allData.slice(0, 100)
             } catch (e) {
                 console.error('Error scraping Amazon:', e)
-                return []
+                return allData
             } finally {
                 await page.close()
             }
@@ -184,73 +200,228 @@ export async function runScraper(jobId: string, productName: string) {
 
         const scrapeShopee = async () => {
             const page = await context.newPage()
+            let allData: any[] = []
             try {
                 console.log('Navigating to Shopee...')
-                // Simplified URL as requested by user to avoid login issues
-                const shopeeSearchUrl = `https://shopee.com.br/search?keyword=${encodeURIComponent(productName)}`
+                const searchQuery = options?.category ? `${productName} ${options.category}` : productName
+                // order=asc&sortBy=price
+                const shopeeSearchUrl = `https://shopee.com.br/search?keyword=${encodeURIComponent(searchQuery)}&order=asc&sortBy=price`
                 console.log('Shopee URL:', shopeeSearchUrl)
 
                 await page.goto(shopeeSearchUrl, { waitUntil: 'domcontentloaded' })
-                await page.waitForTimeout(3000) // Wait for dynamic content
+                await page.waitForTimeout(3000)
 
                 try {
                     const closePopup = await page.locator('.shopee-popup__close-btn').first()
                     if (await closePopup.isVisible()) await closePopup.click()
                 } catch { }
 
-                await autoScroll(page)
+                let pageNum = 0
+                while (allData.length < 100 && pageNum < 5) { // Limit pages to avoid infinite loops
+                    await autoScroll(page)
 
-                const shopeeResults = await page.evaluate(() => {
-                    const items = document.querySelectorAll('.shopee-search-item-result__item')
-                    const data: any[] = []
-                    items.forEach((item) => {
-                        if (data.length >= 50) return
-                        const linkElement = item.querySelector('a')
-                        const link = linkElement?.getAttribute('href')
+                    const pageResults = await page.evaluate(() => {
+                        const items = document.querySelectorAll('.shopee-search-item-result__item')
+                        const data: any[] = []
+                        items.forEach((item) => {
+                            const linkElement = item.querySelector('a')
+                            const link = linkElement?.getAttribute('href')
 
-                        let title = item.querySelector('div[data-sqe="name"] > div')?.textContent?.trim()
-                        if (!title) title = linkElement?.textContent?.trim()
+                            let title = item.querySelector('div[data-sqe="name"] > div')?.textContent?.trim()
+                            if (!title) title = linkElement?.textContent?.trim()
 
-                        let priceText = item.querySelector('div[data-sqe="name"] + div')?.textContent
-                        if (!priceText) priceText = Array.from(item.querySelectorAll('span')).find(el => el.textContent?.includes('R$'))?.textContent
+                            let priceText = item.querySelector('div[data-sqe="name"] + div')?.textContent
+                            if (!priceText) priceText = Array.from(item.querySelectorAll('span')).find(el => el.textContent?.includes('R$'))?.textContent
 
-                        const image = item.querySelector('img')?.getAttribute('src')
+                            const image = item.querySelector('img')?.getAttribute('src')
 
-                        if (title && priceText && link) {
-                            const cleanPrice = priceText.replace(/[^\d,]/g, '').replace(',', '.')
-                            const price = parseFloat(cleanPrice)
-                            if (!isNaN(price)) {
-                                data.push({
-                                    title,
-                                    price,
-                                    link: link.startsWith('http') ? link : `https://shopee.com.br${link}`,
-                                    image,
-                                    marketplace: 'SHOPEE'
-                                })
+                            if (title && priceText && link) {
+                                const cleanPrice = priceText.replace(/[^\d,]/g, '').replace(',', '.')
+                                const price = parseFloat(cleanPrice)
+                                if (!isNaN(price)) {
+                                    data.push({
+                                        title,
+                                        price,
+                                        link: link.startsWith('http') ? link : `https://shopee.com.br${link}`,
+                                        image,
+                                        marketplace: 'SHOPEE'
+                                    })
+                                }
                             }
-                        }
+                        })
+                        return data
                     })
-                    return data
-                })
 
-                console.log(`Shopee: Found ${shopeeResults.length} items`)
-                return shopeeResults
+                    allData = [...allData, ...pageResults]
+                    console.log(`Shopee: Found ${allData.length} items so far`)
+
+                    if (allData.length >= 100) break
+
+                    // Next Page (Shopee pagination is tricky, usually button with icon)
+                    const nextButton = await page.$('.shopee-icon-button--right')
+                    if (nextButton) {
+                        // Check if disabled
+                        const isDisabled = await page.evaluate((btn) => btn.hasAttribute('disabled') || btn.classList.contains('shopee-button-solid--disabled'), nextButton)
+                        if (isDisabled) break
+
+                        await nextButton.click()
+                        await page.waitForTimeout(3000)
+                        pageNum++
+                    } else {
+                        break
+                    }
+                }
+                return allData.slice(0, 100)
             } catch (e) {
                 console.error('Error scraping Shopee:', e)
-                return []
+                return allData
             } finally {
                 await page.close()
             }
         }
 
-        // Run all scrapers in parallel
-        const [mlItems, amzItems, shopeeItems] = await Promise.all([
-            scrapeMercadoLivre(),
-            scrapeAmazon(),
-            scrapeShopee()
-        ])
+        const scrapeMagalu = async () => {
+            const page = await context.newPage()
+            let allData: any[] = []
+            try {
+                console.log('Navigating to Magalu...')
+                const searchQuery = options?.category ? `${productName} ${options.category}` : productName
+                await page.goto(`https://www.magazineluiza.com.br/busca/${encodeURIComponent(searchQuery)}/`, { waitUntil: 'domcontentloaded' })
 
-        const allResults = [...mlItems, ...amzItems, ...shopeeItems]
+                await autoScroll(page)
+
+                const pageResults = await page.evaluate(() => {
+                    const items = document.querySelectorAll('[data-testid="product-card-content"]')
+                    const data: any[] = []
+                    items.forEach((item) => {
+                        const title = item.querySelector('[data-testid="product-title"]')?.textContent?.trim()
+                        const priceText = item.querySelector('[data-testid="price-value"]')?.textContent
+                        const link = item.closest('a')?.getAttribute('href')
+                        const image = item.querySelector('img')?.getAttribute('src')
+
+                        if (title && priceText && link) {
+                            const price = parseFloat(priceText.replace('R$', '').replace(/\./g, '').replace(',', '.').trim())
+                            data.push({
+                                title,
+                                price,
+                                link: link.startsWith('http') ? link : `https://www.magazineluiza.com.br${link}`,
+                                image,
+                                marketplace: 'MAGALU'
+                            })
+                        }
+                    })
+                    return data
+                })
+                allData = [...allData, ...pageResults]
+                return allData.slice(0, 100)
+            } catch (e) {
+                console.error('Error scraping Magalu:', e)
+                return allData
+            } finally {
+                await page.close()
+            }
+        }
+
+        const scrapeAliExpress = async () => {
+            const page = await context.newPage()
+            let allData: any[] = []
+            try {
+                console.log('Navigating to AliExpress...')
+                const searchQuery = options?.category ? `${productName} ${options.category}` : productName
+                await page.goto(`https://pt.aliexpress.com/wholesale?SearchText=${encodeURIComponent(searchQuery)}`, { waitUntil: 'domcontentloaded' })
+
+                await autoScroll(page)
+
+                const pageResults = await page.evaluate(() => {
+                    // AliExpress selectors are dynamic, using generic classes
+                    const items = document.querySelectorAll('.list--gallery--34Gt4P8 > a') // Example selector, might need adjustment
+                    const data: any[] = []
+                    items.forEach((item) => {
+                        const title = item.querySelector('.multi--titleText--nXeOvyr')?.textContent?.trim()
+                        const priceText = item.querySelector('.multi--price-sale--U-S0jtj')?.textContent
+                        const link = item.getAttribute('href')
+                        const image = item.querySelector('img')?.getAttribute('src')
+
+                        if (title && priceText && link) {
+                            const price = parseFloat(priceText.replace('R$', '').replace(/\./g, '').replace(',', '.').trim())
+                            data.push({
+                                title,
+                                price,
+                                link: link.startsWith('http') ? link : `https:${link}`,
+                                image,
+                                marketplace: 'ALIEXPRESS'
+                            })
+                        }
+                    })
+                    return data
+                })
+                allData = [...allData, ...pageResults]
+                return allData.slice(0, 100)
+            } catch (e) {
+                console.error('Error scraping AliExpress:', e)
+                return allData
+            } finally {
+                await page.close()
+            }
+        }
+
+        const scrapeCasasBahia = async () => {
+            const page = await context.newPage()
+            let allData: any[] = []
+            try {
+                console.log('Navigating to Casas Bahia...')
+                const searchQuery = options?.category ? `${productName} ${options.category}` : productName
+                await page.goto(`https://www.casasbahia.com.br/${encodeURIComponent(searchQuery)}/b`, { waitUntil: 'domcontentloaded' })
+
+                await autoScroll(page)
+
+                const pageResults = await page.evaluate(() => {
+                    const items = document.querySelectorAll('.product-card')
+                    const data: any[] = []
+                    items.forEach((item) => {
+                        const title = item.querySelector('.product-card__title')?.textContent?.trim()
+                        const priceText = item.querySelector('.product-card__price')?.textContent
+                        const link = item.querySelector('a')?.getAttribute('href')
+                        const image = item.querySelector('img')?.getAttribute('src')
+
+                        if (title && priceText && link) {
+                            const price = parseFloat(priceText.replace('R$', '').replace(/\./g, '').replace(',', '.').trim())
+                            data.push({
+                                title,
+                                price,
+                                link: link.startsWith('http') ? link : `https://www.casasbahia.com.br${link}`,
+                                image,
+                                marketplace: 'CASAS_BAHIA'
+                            })
+                        }
+                    })
+                    return data
+                })
+                allData = [...allData, ...pageResults]
+                return allData.slice(0, 100)
+            } catch (e) {
+                console.error('Error scraping Casas Bahia:', e)
+                return allData
+            } finally {
+                await page.close()
+            }
+        }
+
+        // Run scrapers based on selection (default to all if not specified or empty)
+        const selectedMarketplaces = options?.marketplaces && options.marketplaces.length > 0
+            ? options.marketplaces
+            : ['MERCADO_LIVRE', 'AMAZON', 'SHOPEE']
+
+        const promises = []
+        if (selectedMarketplaces.includes('MERCADO_LIVRE')) promises.push(scrapeMercadoLivre())
+        if (selectedMarketplaces.includes('AMAZON')) promises.push(scrapeAmazon())
+        if (selectedMarketplaces.includes('SHOPEE')) promises.push(scrapeShopee())
+        if (selectedMarketplaces.includes('MAGALU')) promises.push(scrapeMagalu())
+        if (selectedMarketplaces.includes('ALIEXPRESS')) promises.push(scrapeAliExpress())
+        if (selectedMarketplaces.includes('CASAS_BAHIA')) promises.push(scrapeCasasBahia())
+
+        const results = await Promise.all(promises)
+        const allResults = results.flat()
         console.log(`Total raw items found: ${allResults.length}`)
         totalItems = allResults.length
 
@@ -261,11 +432,13 @@ export async function runScraper(jobId: string, productName: string) {
             for (const res of items) {
                 const searchTerms = productName.toLowerCase().split(' ').filter(w => w.length > 2)
                 const titleLower = res.title.toLowerCase()
+                // Basic pre-filter
                 if (!searchTerms.some(term => titleLower.includes(term))) continue
 
                 const analysis = await analyzeProductMatch(
                     { name: productName, description: product?.description },
-                    { title: res.title, price: res.price, link: res.link, rawLocation: res.location }
+                    { title: res.title, price: res.price, link: res.link, rawLocation: res.location },
+                    options?.instructions // Pass instructions to AI
                 )
 
                 if (analysis.score > 50) {

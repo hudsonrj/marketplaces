@@ -1,0 +1,7 @@
+Environment variables loaded from .env
+Prisma schema loaded from prisma\schema.prisma
+Datasource "db": PostgreSQL database "postgres", schema "public" at "db.wsazsywdqddgdykkuwdq.supabase.co:5432"
+Error: P4002
+
+The schema of the introspected database was inconsistent: The schema of the introspected database was inconsistent: Cross schema references are only allowed when the target schema is listed in the schemas property of your datasource. `public.agents` points to `auth.users` in constraint `agents_created_by_fkey`. Please add `auth` to your `schemas` property and run this command again.
+

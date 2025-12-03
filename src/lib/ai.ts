@@ -24,7 +24,8 @@ export async function getAIClient() {
 
 export async function analyzeProductMatch(
     target: { name: string, description?: string | null },
-    candidate: { title: string, price: number, link: string, rawLocation?: string | null }
+    candidate: { title: string, price: number, link: string, rawLocation?: string | null },
+    instructions?: string
 ): Promise<{
     score: number;
     reasoning: string;
@@ -51,6 +52,8 @@ export async function analyzeProductMatch(
         Title: "${candidate.title}"
         Price: ${candidate.price}
         Location Raw: "${candidate.rawLocation || ''}"
+
+        ${instructions ? `ADDITIONAL INSTRUCTIONS FROM USER:\n"${instructions}"\n(Strictly follow these instructions when calculating the score)` : ''}
         
         Tasks:
         1. Calculate a match score (0-100) representing how likely this offer is for the EXACT target product.

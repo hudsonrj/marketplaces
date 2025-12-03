@@ -1,10 +1,12 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["marketplaces"]
 }
 
 model Product {
@@ -25,6 +27,8 @@ model Product {
   lastBestPriceDate DateTime? @map("last_best_price_date")
 
   searchJobs  SearchJob[]
+
+  @@schema("marketplaces")
 }
 
 model SearchJob {
@@ -36,6 +40,8 @@ model SearchJob {
 
   product   Product  @relation(fields: [productId], references: [id])
   results   SearchResult[]
+
+  @@schema("marketplaces")
 }
 
 model SearchResult {
@@ -61,6 +67,8 @@ model SearchResult {
   collectedAt    DateTime @default(now()) @map("collected_at")
 
   job            SearchJob @relation(fields: [jobId], references: [id])
+
+  @@schema("marketplaces")
 }
 
 model Settings {
@@ -69,4 +77,6 @@ model Settings {
   aiModel     String   @default("gpt-4o-mini")
   aiApiKey    String   @default("")
   updatedAt   DateTime @updatedAt
+
+  @@schema("marketplaces")
 }

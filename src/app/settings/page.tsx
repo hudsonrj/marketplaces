@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { backupDatabase, listBackups, restoreDatabase, getSettings, updateSettings } from './actions'
+import { backupDatabase, listBackups, restoreDatabase, getSettings, updateSettings, testAIConnection } from './actions'
 import { Save, RotateCcw, Database, Check, AlertTriangle, Bot } from 'lucide-react'
 
 export default function SettingsPage() {
     const [backups, setBackups] = useState<string[]>([])
     const [loading, setLoading] = useState(false)
     const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+    const [availableModels, setAvailableModels] = useState<string[]>([])
 
     // AI Settings State
     const [aiSettings, setAiSettings] = useState({
@@ -133,17 +134,48 @@ export default function SettingsPage() {
 
                     <div>
                         <label style={{ display: 'block', color: '#e2e8f0', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Modelo</label>
-                        <input
-                            type="text"
-                            value={aiSettings.aiModel}
-                            onChange={e => setAiSettings({ ...aiSettings, aiModel: e.target.value })}
-                            placeholder="Ex: gpt-4o-mini, llama3-70b-8192"
-                            style={{
-                                width: '100%', padding: '0.75rem', borderRadius: '8px',
-                                background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)',
-                                color: 'white', outline: 'none'
-                            }}
-                        />
+                        {availableModels.length > 0 ? (
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <select
+                                    value={aiSettings.aiModel}
+                                    onChange={e => setAiSettings({ ...aiSettings, aiModel: e.target.value })}
+                                    style={{
+                                        width: '100%', padding: '0.75rem', borderRadius: '8px',
+                                        background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)',
+                                        color: 'white', outline: 'none'
+                                    }}
+                                >
+                                    {availableModels.map(m => (
+                                        <option key={m} value={m}>{m}</option>
+                                    ))}
+                                </select>
+                                <button
+                                    type="button"
+                                    onClick={() => setAvailableModels([])}
+                                    className="btn-secondary"
+                                    title="Digitar manualmente"
+                                >
+                                    Manual
+                                </button>
+                            </div>
+                        ) : (
+                            <input
+                                type="text"
+                                value={aiSettings.aiModel}
+                                onChange={e => setAiSettings({ ...aiSettings, aiModel: e.target.value })}
+                                placeholder="Ex: gpt-4o-mini, llama3-70b-8192"
+                                style={{
+                                    width: '100%', padding: '0.75rem', borderRadius: '8px',
+                                    background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)',
+                                    color: 'white', outline: 'none'
+                                }}
+                            />
+                        )}
+                        {availableModels.length > 0 && (
+                            <p style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.5rem' }}>
+                                ✓ {availableModels.length} modelos carregados da API.
+                            </p>
+                        )}
                     </div>
 
                     <div>
@@ -161,10 +193,33 @@ export default function SettingsPage() {
                         />
                     </div>
 
-                    <button type="submit" disabled={loading} className="btn-primary" style={{ alignSelf: 'flex-end' }}>
-                        <Save size={18} />
-                        Salvar Configurações
-                    </button>
+                    <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                setLoading(true)
+                                setMessage(null)
+                                const res = await testAIConnection(aiSettings.aiApiKey, aiSettings.aiProvider)
+                                if (res.success && res.models) {
+                                    setMessage({ type: 'success', text: `Conexão bem sucedida! ${res.models.length} modelos encontrados.` })
+                                    setAvailableModels(res.models)
+                                } else {
+                                    setMessage({ type: 'error', text: `Erro na conexão: ${res.message}` })
+                                }
+                                setLoading(false)
+                            }}
+                            disabled={loading || !aiSettings.aiApiKey}
+                            className="btn-secondary"
+                        >
+                            Testar Conexão
+                        </button>
+                        <button type="submit" disabled={loading} className="btn-primary">
+                            <Save size={18} />
+                            Salvar Configurações
+                        </button>
+                    </div>
+
+
                 </form>
             </div>
 

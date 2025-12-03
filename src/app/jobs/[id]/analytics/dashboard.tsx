@@ -8,7 +8,7 @@ import {
 export default function AnalyticsDashboard({ results, history }: { results: any[], history: any[] }) {
 
     // 1. Stats by Marketplace
-    const byMarketplace = results.reduce((acc: any, curr) => {
+    const byMarketplace = results.reduce((acc: Record<string, { name: string, count: number, total: number, min: number }>, curr) => {
         const mp = curr.marketplace
         if (!acc[mp]) acc[mp] = { name: mp, count: 0, total: 0, min: Infinity }
         acc[mp].count++
@@ -19,7 +19,7 @@ export default function AnalyticsDashboard({ results, history }: { results: any[
     const mpChartData = Object.values(byMarketplace).map((d: any) => ({ ...d, avg: d.total / d.count }))
 
     // 2. Stats by Store (Seller)
-    const byStore = results.reduce((acc: any, curr) => {
+    const byStore = results.reduce((acc: Record<string, { name: string, count: number }>, curr) => {
         const seller = curr.sellerName || 'Desconhecido'
         if (!acc[seller]) acc[seller] = { name: seller, count: 0 }
         acc[seller].count++
@@ -30,7 +30,7 @@ export default function AnalyticsDashboard({ results, history }: { results: any[
         .slice(0, 10) // Top 10 stores
 
     // 3. Stats by Rating
-    const byRating = results.reduce((acc: any, curr) => {
+    const byRating = results.reduce((acc: Record<string, { name: string, value: number }>, curr) => {
         const rating = curr.reviewScore ? Math.floor(Number(curr.reviewScore)) : 0
         const label = rating > 0 ? `${rating} Estrelas` : 'Sem Avaliação'
         if (!acc[label]) acc[label] = { name: label, value: 0 }

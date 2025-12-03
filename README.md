@@ -53,7 +53,7 @@ Os agentes não são simples scripts de requisição HTTP; são navegadores comp
 
 *   **Frontend**: Next.js 16 (App Router), React 19, Lucide Icons.
 *   **Backend**: Server Actions, Prisma ORM.
-*   **Banco de Dados**: SQLite (Dados operacionais) + DuckDB (Analytics).
+*   **Banco de Dados**: PostgreSQL (Supabase) + DuckDB (Analytics).
 *   **Automação**: Playwright (Chromium Headless/Headful).
 *   **AI/LLM**: OpenAI SDK (Integrado com múltiplos providers).
 *   **Estilização**: CSS Moderno com design Glassmorphism.
@@ -82,10 +82,11 @@ Os agentes não são simples scripts de requisição HTTP; são navegadores comp
     ```
 
 4.  **Variáveis de Ambiente**:
-    Crie um arquivo `.env` na raiz (opcional se for configurar a IA pela interface, mas recomendado para chaves padrão):
+    Crie um arquivo `.env` na raiz com as credenciais do Supabase:
     ```env
-    DATABASE_URL="file:./dev.db"
-    OPENAI_API_KEY="sua-chave-aqui"
+    DATABASE_URL="postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres"
+    NEXT_PUBLIC_SUPABASE_URL="https://[PROJECT_REF].supabase.co"
+    NEXT_PUBLIC_SUPABASE_ANON_KEY="[ANON_KEY]"
     ```
 
 5.  **Inicie o Servidor de Desenvolvimento**:

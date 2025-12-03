@@ -89,3 +89,25 @@ export async function updateSettings(data: { aiProvider: string, aiModel: string
         return { success: false, message: 'Erro ao salvar configurações.' }
     }
 }
+
+import OpenAI from 'openai'
+
+export async function testAIConnection(apiKey: string, provider: string) {
+    try {
+        const baseURL =
+            provider === 'openrouter' ? 'https://openrouter.ai/api/v1' :
+                provider === 'groq' ? 'https://api.groq.com/openai/v1' :
+                    provider === 'deepseek' ? 'https://api.deepseek.com/v1' :
+                        undefined // Default OpenAI
+
+        const client = new OpenAI({
+            apiKey: apiKey,
+            baseURL: baseURL,
+        })
+
+        const list = await client.models.list()
+        return { success: true, models: list.data.map(m => m.id) }
+    } catch (error: any) {
+        return { success: false, message: error.message }
+    }
+}

@@ -9,6 +9,7 @@ const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
     { icon: ShoppingBag, label: 'Produtos', href: '/products' },
     { icon: Search, label: 'Jobs de Busca', href: '/jobs' },
+    { icon: Zap, label: 'Busca em Massa', href: '/bulk-search' },
     { icon: BarChart3, label: 'Analytics', href: '/analytics' },
     { icon: Bot, label: 'Assistente', href: '/assistant' },
     { icon: Settings, label: 'Configurações', href: '/settings' },

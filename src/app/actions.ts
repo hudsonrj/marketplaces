@@ -241,3 +241,37 @@ export async function askAssistant(history: { role: 'user' | 'assistant', conten
         return "Desculpe, ocorreu um erro ao processar sua mensagem."
     }
 }
+
+export async function startBulkSearch(formData: FormData) {
+    const instructions = formData.get('instructions') as string
+    const marketplaces = formData.getAll('marketplaces') as string[] // Not used yet in scraper, but good to have for future filtering
+
+    // Get all active products
+    const products = await prisma.product.findMany({
+        where: { active: true }
+    })
+
+    console.log(`Starting bulk search for ${products.length} products...`)
+
+    for (const product of products) {
+        const job = await prisma.searchJob.create({
+            data: {
+                productId: product.id,
+                status: 'PENDING',
+            }
+        })
+
+        // Trigger scraper in background
+        // We pass the category if available (product.category)
+        // And the user instructions
+        setTimeout(() => {
+            runScraper(job.id, product.name, {
+                category: product.category || undefined,
+                instructions: instructions
+            }).catch(console.error)
+        }, 100)
+    }
+
+    revalidatePath('/jobs')
+    redirect('/jobs')
+}
