@@ -3,7 +3,15 @@ import Link from 'next/link'
 import { Search, RefreshCw, Eye, Clock } from 'lucide-react'
 
 export default async function JobsPage() {
-    const jobs = await getJobs()
+    const rawJobs = await getJobs()
+    const jobs = rawJobs.map(job => ({
+        ...job,
+        results: job.results.map(r => ({
+            ...r,
+            price: Number(r.price),
+            shipping: r.shipping ? Number(r.shipping) : null
+        }))
+    }))
 
     return (
         <div>
@@ -50,9 +58,9 @@ export default async function JobsPage() {
                                                 job.status === 'FAILED' ? '#ef4444' :
                                                     '#94a3b8',
                                         border: `1px solid ${job.status === 'COMPLETED' ? 'rgba(16, 185, 129, 0.2)' :
-                                                job.status === 'RUNNING' ? 'rgba(59, 130, 246, 0.2)' :
-                                                    job.status === 'FAILED' ? 'rgba(239, 68, 68, 0.2)' :
-                                                        'rgba(148, 163, 184, 0.2)'
+                                            job.status === 'RUNNING' ? 'rgba(59, 130, 246, 0.2)' :
+                                                job.status === 'FAILED' ? 'rgba(239, 68, 68, 0.2)' :
+                                                    'rgba(148, 163, 184, 0.2)'
                                             }`
                                     }}>
                                         {job.status}

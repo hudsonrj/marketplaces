@@ -16,6 +16,27 @@ async function getProducts() {
 async function deleteProduct(formData: FormData) {
     'use server'
     const id = formData.get('id') as string
+
+    // Find all jobs related to this product
+    const jobs = await prisma.searchJob.findMany({
+        where: { productId: id },
+        select: { id: true }
+    })
+    const jobIds = jobs.map(j => j.id)
+
+    // Delete all results from these jobs
+    if (jobIds.length > 0) {
+        await prisma.searchResult.deleteMany({
+            where: { jobId: { in: jobIds } }
+        })
+    }
+
+    // Delete the jobs
+    await prisma.searchJob.deleteMany({
+        where: { productId: id }
+    })
+
+    // Finally, delete the product
     await prisma.product.delete({ where: { id } })
     revalidatePath('/products')
 }
@@ -46,6 +67,7 @@ export default async function ProductsPage() {
                         <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.2)' }}>
                             <th style={{ padding: '1rem', textAlign: 'left', color: '#94a3b8', fontSize: '0.875rem', fontWeight: '600' }}>STATUS</th>
                             <th style={{ padding: '1rem', textAlign: 'left', color: '#94a3b8', fontSize: '0.875rem', fontWeight: '600' }}>NOME</th>
+                            <th style={{ padding: '1rem', textAlign: 'left', color: '#94a3b8', fontSize: '0.875rem', fontWeight: '600' }}>CATEGORIA</th>
                             <th style={{ padding: '1rem', textAlign: 'left', color: '#94a3b8', fontSize: '0.875rem', fontWeight: '600' }}>MELHOR PREÇO</th>
                             <th style={{ padding: '1rem', textAlign: 'left', color: '#94a3b8', fontSize: '0.875rem', fontWeight: '600' }}>JOBS</th>
                             <th style={{ padding: '1rem', textAlign: 'right', color: '#94a3b8', fontSize: '0.875rem', fontWeight: '600' }}>AÇÕES</th>
@@ -68,6 +90,7 @@ export default async function ProductsPage() {
                                     </form>
                                 </td>
                                 <td style={{ padding: '1rem', fontWeight: '500' }}>{product.name}</td>
+                                <td style={{ padding: '1rem', color: '#94a3b8', fontSize: '0.9rem' }}>{product.category || '-'}</td>
                                 <td style={{ padding: '1rem', color: product.lastBestPrice ? '#10b981' : '#94a3b8' }}>
                                     {product.lastBestPrice ? (
                                         <div style={{ display: 'flex', flexDirection: 'column' }}>

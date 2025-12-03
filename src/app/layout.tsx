@@ -11,6 +11,8 @@ export const metadata: Metadata = {
   description: 'Plataforma avançada de monitoramento de preços e concorrentes.',
 }
 
+import AssistantChat from '@/components/AssistantChat'
+
 export default function RootLayout({
   children,
 }: {
@@ -33,6 +35,7 @@ export default function RootLayout({
             </div>
           </main>
         </div>
+        <AssistantChat />
       </body>
     </html>
   )
