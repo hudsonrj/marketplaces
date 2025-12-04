@@ -36,7 +36,8 @@ model SearchJob {
   productId String   @map("product_id")
   status    String
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  scheduledFor DateTime? @map("scheduled_for")
 
   product   Product  @relation(fields: [productId], references: [id])
   results   SearchResult[]

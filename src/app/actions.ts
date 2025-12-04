@@ -59,32 +59,85 @@ export async function toggleProductActive(id: string, active: boolean) {
     revalidatePath('/products')
 }
 
+export async function deleteProduct(formData: FormData) {
+    const id = formData.get('id') as string
+
+    // Find all jobs related to this product
+    const jobs = await prisma.searchJob.findMany({
+        where: { productId: id },
+        select: { id: true }
+    })
+    const jobIds = jobs.map(j => j.id)
+
+    // Delete all results from these jobs
+    if (jobIds.length > 0) {
+        await prisma.searchResult.deleteMany({
+            where: { jobId: { in: jobIds } }
+        })
+    }
+
+    // Delete the jobs
+    await prisma.searchJob.deleteMany({
+        where: { productId: id }
+    })
+
+    // Finally, delete the product
+    await prisma.product.delete({ where: { id } })
+    revalidatePath('/products')
+}
+
 export async function getProducts() {
     return await prisma.product.findMany({
         orderBy: { createdAt: 'desc' }
     })
 }
 
-export async function createSearchJob(productId: string) {
+export async function createSearchJob(productId: string, scheduledFor?: Date) {
     const product = await prisma.product.findUnique({ where: { id: productId } })
     if (!product) throw new Error('Product not found')
+
+    const status = scheduledFor ? 'SCHEDULED' : 'PENDING'
 
     const job = await prisma.searchJob.create({
         data: {
             productId,
-            status: 'PENDING',
+            status,
+            scheduledFor
         }
     })
 
-    // Trigger async agent (fire and forget)
-    // In production, this should be a queue (BullMQ/Redis)
-    // For local dev, we just let it run in background
-    setTimeout(() => {
-        runScraper(job.id, product.name).catch(console.error)
-    }, 100)
+    // Only trigger immediately if not scheduled
+    if (!scheduledFor) {
+        setTimeout(() => {
+            runScraper(job.id, product.name).catch(console.error)
+        }, 100)
+    }
 
     revalidatePath('/jobs')
-    redirect('/jobs')
+    // redirect('/jobs') // Don't redirect, let the UI handle it or stay on page
+}
+
+export async function deleteJob(formData: FormData) {
+    const id = formData.get('id') as string
+    await prisma.searchResult.deleteMany({ where: { jobId: id } })
+    await prisma.searchJob.delete({ where: { id } })
+    revalidatePath('/jobs')
+}
+
+export async function updateJob(formData: FormData) {
+    const id = formData.get('id') as string
+    const status = formData.get('status') as string
+    const scheduledFor = formData.get('scheduledFor') as string
+
+    const data: any = {}
+    if (status) data.status = status
+    if (scheduledFor) data.scheduledFor = new Date(scheduledFor)
+
+    await prisma.searchJob.update({
+        where: { id },
+        data
+    })
+    revalidatePath('/jobs')
 }
 
 export async function getJobs() {

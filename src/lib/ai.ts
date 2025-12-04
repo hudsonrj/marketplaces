@@ -39,63 +39,72 @@ export async function analyzeProductMatch(
         description: string;
     } | null
 }> {
-    try {
-        const { client, model } = await getAIClient()
+    let retries = 3
+    while (retries > 0) {
+        try {
+            const { client, model } = await getAIClient()
 
-        const prompt = `
-        Analyze the following product offer against the target product.
-        
-        Target Product: "${target.name}"
-        Target Description: "${target.description || ''}"
-        
-        Candidate Offer:
-        Title: "${candidate.title}"
-        Price: ${candidate.price}
-        Location Raw: "${candidate.rawLocation || ''}"
+            const prompt = `
+            Analyze the following product offer against the target product.
+            
+            Target Product: "${target.name}"
+            Target Description: "${target.description || ''}"
+            
+            Candidate Offer:
+            Title: "${candidate.title}"
+            Price: ${candidate.price}
+            Location Raw: "${candidate.rawLocation || ''}"
 
-        ${instructions ? `ADDITIONAL INSTRUCTIONS FROM USER:\n"${instructions}"\n(Strictly follow these instructions when calculating the score)` : ''}
-        
-        Tasks:
-        1. Calculate a match score (0-100) representing how likely this offer is for the EXACT target product.
-        2. Extract a normalized product name (e.g., "iPhone 13 128GB Midnight").
-        3. Extract the City and State (UF) from the Location Raw field if available. Use 2-letter code for State (e.g., SP, RJ).
-        4. **CRITICAL**: If this candidate is a VALID, REAL product but DIFFERENT from the target (e.g., different model, different memory, different color, or an accessory), provide details to register it as a NEW product in our catalog.
-           - Name: A clean, standardized name for this new product.
-           - Brand: The brand of the product.
-           - Category: A general category (e.g., "Smartphones", "Acessórios", "Eletrodomésticos").
-           - Description: A brief description based on the title.
-        
-        Return ONLY a JSON object with this structure:
-        {
-            "score": number,
-            "reasoning": "string",
-            "normalizedName": "string",
-            "city": "string" | null,
-            "state": "string" | null,
-            "newProductCandidate": {
-                "name": "string",
-                "brand": "string",
-                "category": "string",
-                "description": "string"
-            } | null
+            ${instructions ? `ADDITIONAL INSTRUCTIONS FROM USER:\n"${instructions}"\n(Strictly follow these instructions when calculating the score)` : ''}
+            
+            Tasks:
+            1. Calculate a match score (0-100) representing how likely this offer is for the EXACT target product.
+            2. Extract a normalized product name (e.g., "iPhone 13 128GB Midnight").
+            3. Extract the City and State (UF) from the Location Raw field if available. Use 2-letter code for State (e.g., SP, RJ).
+            4. **CRITICAL**: If this candidate is a VALID, REAL product but DIFFERENT from the target (e.g., different model, different memory, different color, or an accessory), provide details to register it as a NEW product in our catalog.
+               - Name: A clean, standardized name for this new product.
+               - Brand: The brand of the product.
+               - Category: A general category (e.g., "Smartphones", "Acessórios", "Eletrodomésticos").
+               - Description: A brief description based on the title.
+            
+            Return ONLY a JSON object with this structure:
+            {
+                "score": number,
+                "reasoning": "string",
+                "normalizedName": "string",
+                "city": "string" | null,
+                "state": "string" | null,
+                "newProductCandidate": {
+                    "name": "string",
+                    "brand": "string",
+                    "category": "string",
+                    "description": "string"
+                } | null
+            }
+            `
+
+            const completion = await client.chat.completions.create({
+                messages: [{ role: "user", content: prompt }],
+                model: model,
+                response_format: { type: "json_object" }
+            })
+
+            const content = completion.choices[0].message.content
+            if (!content) throw new Error('Empty response from OpenAI')
+
+            return JSON.parse(content)
+
+        } catch (error) {
+            console.error(`AI Analysis failed (Attempt ${4 - retries}/3):`, error)
+            retries--
+            if (retries === 0) {
+                return { score: 0, reasoning: 'Error after retries', normalizedName: candidate.title, city: null, state: null }
+            }
+            // Wait 2 seconds before retrying
+            await new Promise(resolve => setTimeout(resolve, 2000))
         }
-        `
-
-        const completion = await client.chat.completions.create({
-            messages: [{ role: "user", content: prompt }],
-            model: model,
-            response_format: { type: "json_object" }
-        })
-
-        const content = completion.choices[0].message.content
-        if (!content) throw new Error('Empty response from OpenAI')
-
-        return JSON.parse(content)
-
-    } catch (error) {
-        console.error('AI Analysis failed:', error)
-        return { score: 0, reasoning: 'Error', normalizedName: candidate.title, city: null, state: null }
     }
+    return { score: 0, reasoning: 'Unexpected exit', normalizedName: candidate.title, city: null, state: null }
 }
 
 export async function checkProductDuplication(

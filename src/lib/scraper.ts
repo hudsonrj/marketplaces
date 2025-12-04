@@ -19,8 +19,7 @@ export async function runScraper(jobId: string, productName: string, options?: {
         })
 
         const browser = await chromium.launch({
-            headless: true, // User requested background, so headless true is better, but let's keep it false for debugging if needed or make it configurable. 
-            // Actually, for "background" jobs initiated by user, headless=true is standard.
+            headless: true,
             args: [
                 '--disable-blink-features=AutomationControlled',
                 '--no-sandbox',
@@ -29,7 +28,9 @@ export async function runScraper(jobId: string, productName: string, options?: {
                 '--window-position=0,0',
                 '--ignore-certifcate-errors',
                 '--ignore-certifcate-errors-spki-list',
-                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                '--disable-accelerated-2d-canvas',
+                '--disable-gpu'
             ]
         })
 
@@ -39,6 +40,12 @@ export async function runScraper(jobId: string, productName: string, options?: {
             locale: 'pt-BR',
             timezoneId: 'America/Sao_Paulo'
         })
+
+        context.setDefaultTimeout(60000) // Increase timeout to 60s
+        context.setDefaultNavigationTimeout(60000)
+
+        // Block heavy resources to speed up loading
+        await context.route('**/*.{png,jpg,jpeg,gif,webp,svg,css,woff,woff2}', route => route.abort())
 
         await context.addInitScript(() => {
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
@@ -65,6 +72,22 @@ export async function runScraper(jobId: string, productName: string, options?: {
         };
 
         // Define scraper tasks
+        // Helper for robust navigation
+        const safeGoto = async (page: any, url: string) => {
+            let retries = 3
+            while (retries > 0) {
+                try {
+                    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 })
+                    return true
+                } catch (e) {
+                    console.log(`Navigation failed, retrying... (${retries} left)`)
+                    retries--
+                    await page.waitForTimeout(2000)
+                }
+            }
+            return false
+        }
+
         const scrapeMercadoLivre = async () => {
             const page = await context.newPage()
             let allData: any[] = []
@@ -72,7 +95,8 @@ export async function runScraper(jobId: string, productName: string, options?: {
                 console.log('Navigating to Mercado Livre...')
                 // Construct URL with sorting directly if possible
                 const searchQuery = options?.category ? `${productName} ${options.category}` : productName
-                await page.goto(`https://lista.mercadolivre.com.br/${encodeURIComponent(searchQuery)}_OrderId_PRICE_ASC`, { waitUntil: 'domcontentloaded' })
+                const success = await safeGoto(page, `https://lista.mercadolivre.com.br/${encodeURIComponent(searchQuery)}_OrderId_PRICE_ASC`)
+                if (!success) throw new Error('Failed to load Mercado Livre')
 
                 // Pagination Loop
                 while (allData.length < 100) {
@@ -143,7 +167,8 @@ export async function runScraper(jobId: string, productName: string, options?: {
                 const searchQuery = options?.category ? `${productName} ${options.category}` : productName
                 // s=price-asc-rank sorts by price low to high
                 const amazonSearchUrl = `https://www.amazon.com.br/s?k=${encodeURIComponent(searchQuery)}&s=price-asc-rank`
-                await page.goto(amazonSearchUrl, { waitUntil: 'domcontentloaded' })
+                const success = await safeGoto(page, amazonSearchUrl)
+                if (!success) throw new Error('Failed to load Amazon')
 
                 while (allData.length < 100) {
                     await autoScroll(page)
@@ -208,7 +233,9 @@ export async function runScraper(jobId: string, productName: string, options?: {
                 const shopeeSearchUrl = `https://shopee.com.br/search?keyword=${encodeURIComponent(searchQuery)}&order=asc&sortBy=price`
                 console.log('Shopee URL:', shopeeSearchUrl)
 
-                await page.goto(shopeeSearchUrl, { waitUntil: 'domcontentloaded' })
+                const success = await safeGoto(page, shopeeSearchUrl)
+                if (!success) throw new Error('Failed to load Shopee')
+
                 await page.waitForTimeout(3000)
 
                 try {
