@@ -1,16 +1,12 @@
-import { PrismaClient } from '@prisma/client'
-import { BarChart3, TrendingUp, DollarSign, ShoppingBag } from 'lucide-react'
-import { getGlobalAnalyticsData } from '@/lib/duckdb'
-import GlobalAnalyticsDashboard from './dashboard'
-import ProductFilter from './filter'
-
-const prisma = new PrismaClient()
+import { prisma } from '@/lib/prisma'
+import { getGlobalAnalyticsData, getProductPriceHistory, getTopLocations } from '@/lib/analytics'
+import AnalyticsDashboard from './AnalyticsDashboard'
 
 async function getStats(productId?: string) {
     const where = productId ? { productId } : {}
     const whereResult = productId ? { job: { productId } } : {}
 
-    const totalProducts = await prisma.product.count() // Total products always global
+    const totalProducts = await prisma.product.count()
     const totalJobs = await prisma.searchJob.count({ where })
     const totalResults = await prisma.searchResult.count({ where: whereResult })
 
@@ -23,7 +19,7 @@ async function getStats(productId?: string) {
         totalProducts,
         totalJobs,
         totalResults,
-        avgPrice: avgPriceResult._avg.price || 0
+        avgPrice: avgPriceResult._avg.price ? Number(avgPriceResult._avg.price) : 0
     }
 }
 
@@ -31,80 +27,69 @@ export default async function GlobalAnalyticsPage({ searchParams }: { searchPara
     const { productId } = await searchParams
     const stats = await getStats(productId)
 
-    // Fetch all products for the filter
-    const products = await prisma.product.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } })
+    // Fetch all products for the filter with result counts
+    const productsRaw = await prisma.product.findMany({
+        select: {
+            id: true,
+            name: true,
+            _count: {
+                select: {
+                    searchJobs: true
+                }
+            }
+        },
+        orderBy: { name: 'asc' }
+    })
+
+    // We need a more complex query to get the actual useful result count (results with match_score > 50)
+    // Doing this via a separate aggregation or raw query might be faster, but let's try to keep it simple first.
+    // Actually, the user wants to know "quantity of records". 
+    // Let's get the count of SearchResults linked to the product's jobs.
+
+    // Optimized query to get counts in one go
+    const counts = await prisma.$queryRaw<any[]>`
+        SELECT j.product_id, COUNT(r.id)::int as count
+        FROM "marketplaces"."SearchResult" r
+        JOIN "marketplaces"."SearchJob" j ON r.job_id = j.id
+        WHERE r.match_score > 50
+        GROUP BY j.product_id
+    `
+
+    const countMap = new Map(counts.map(c => [c.product_id, Number(c.count)]))
+
+    const productsWithCounts = productsRaw.map(p => ({
+        id: p.id,
+        name: p.name,
+        count: countMap.get(p.id) || 0
+    }))
 
     let analyticsData: { marketShare: any[], priceByMarketplace: any[], topSellers: any[] } = { marketShare: [], priceByMarketplace: [], topSellers: [] }
+    let priceHistory: any[] = []
+    let topLocations: any[] = []
+
     try {
-        analyticsData = await getGlobalAnalyticsData(productId)
+        const [data, history, locations] = await Promise.all([
+            getGlobalAnalyticsData(productId),
+            getProductPriceHistory(productId),
+            getTopLocations(productId)
+        ])
+        analyticsData = data
+        priceHistory = history
+        topLocations = locations
     } catch (e) {
-        console.error('Failed to fetch global analytics:', e)
+        console.error('Failed to fetch analytics:', e)
     }
 
     return (
-        <div>
-            <div style={{ marginBottom: '2rem' }}>
-                <h1 style={{ fontSize: '2rem', fontWeight: '700', background: 'linear-gradient(to right, #fff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                    Analytics Global
-                </h1>
-                <p style={{ color: '#94a3b8' }}>Visão consolidada de todos os monitoramentos.</p>
-            </div>
-
-            <ProductFilter products={products} />
-
-            {/* KPI Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
-                <div className="glass-card">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                        <div>
-                            <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Total de Produtos</p>
-                            <h3 style={{ fontSize: '1.75rem', fontWeight: '700', color: 'white' }}>{stats.totalProducts}</h3>
-                        </div>
-                        <div style={{ padding: '0.75rem', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.1)' }}>
-                            <ShoppingBag size={24} color="#3b82f6" />
-                        </div>
-                    </div>
-                    <div style={{ fontSize: '0.875rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                        <TrendingUp size={14} /> +2 novos esta semana
-                    </div>
-                </div>
-
-                <div className="glass-card">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                        <div>
-                            <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Jobs Executados</p>
-                            <h3 style={{ fontSize: '1.75rem', fontWeight: '700', color: 'white' }}>{stats.totalJobs}</h3>
-                        </div>
-                        <div style={{ padding: '0.75rem', borderRadius: '12px', background: 'rgba(139, 92, 246, 0.1)' }}>
-                            <BarChart3 size={24} color="#8b5cf6" />
-                        </div>
-                    </div>
-                    <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                        Taxa de sucesso de 98%
-                    </div>
-                </div>
-
-                <div className="glass-card">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                        <div>
-                            <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Ofertas Coletadas</p>
-                            <h3 style={{ fontSize: '1.75rem', fontWeight: '700', color: 'white' }}>{stats.totalResults}</h3>
-                        </div>
-                        <div style={{ padding: '0.75rem', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.1)' }}>
-                            <DollarSign size={24} color="#10b981" />
-                        </div>
-                    </div>
-                    <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                        Preço médio: R$ {Number(stats.avgPrice).toFixed(2)}
-                    </div>
-                </div>
-            </div>
-
-            <GlobalAnalyticsDashboard
-                marketShare={analyticsData.marketShare}
-                priceByMarketplace={analyticsData.priceByMarketplace}
-                topSellers={analyticsData.topSellers}
-            />
-        </div>
+        <AnalyticsDashboard
+            stats={stats}
+            products={productsWithCounts}
+            selectedProductId={productId}
+            marketShare={analyticsData.marketShare}
+            priceByMarketplace={analyticsData.priceByMarketplace}
+            topSellers={analyticsData.topSellers}
+            priceHistory={priceHistory}
+            topLocations={topLocations}
+        />
     )
 }

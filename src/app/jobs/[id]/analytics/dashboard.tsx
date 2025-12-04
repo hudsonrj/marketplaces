@@ -48,6 +48,12 @@ export default function AnalyticsDashboard({ results, history }: { results: any[
     // 5. Top 10 Lowest Offers
     const lowestOffers = [...results].sort((a, b) => a.price - b.price).slice(0, 10)
 
+    const EmptyState = ({ message }: { message: string }) => (
+        <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#64748b', gap: '0.5rem' }}>
+            <div style={{ fontSize: '0.875rem' }}>{message}</div>
+        </div>
+    )
+
     return (
         <div>
             {/* KPI Cards */}
@@ -80,17 +86,21 @@ export default function AnalyticsDashboard({ results, history }: { results: any[
                 <div className="card" style={{ gridColumn: 'span 2' }}>
                     <h3 style={{ marginBottom: '1rem', fontWeight: 'bold' }}>Histórico de Preços (Banco de Dados)</h3>
                     <div style={{ height: '300px' }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={history}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                <XAxis dataKey="date" stroke="#94a3b8" />
-                                <YAxis stroke="#94a3b8" />
-                                <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }} />
-                                <Legend />
-                                <Line type="monotone" dataKey="min" name="Preço Mínimo" stroke="#10b981" strokeWidth={2} />
-                                <Line type="monotone" dataKey="avg" name="Preço Médio" stroke="#3b82f6" strokeWidth={2} />
-                            </LineChart>
-                        </ResponsiveContainer>
+                        {history.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={history}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                    <XAxis dataKey="date" stroke="#94a3b8" />
+                                    <YAxis stroke="#94a3b8" />
+                                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }} />
+                                    <Legend />
+                                    <Line type="monotone" dataKey="min" name="Preço Mínimo" stroke="#10b981" strokeWidth={2} />
+                                    <Line type="monotone" dataKey="avg" name="Preço Médio" stroke="#3b82f6" strokeWidth={2} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <EmptyState message="Histórico insuficiente." />
+                        )}
                     </div>
                 </div>
 
@@ -98,16 +108,20 @@ export default function AnalyticsDashboard({ results, history }: { results: any[
                 <div className="card">
                     <h3 style={{ marginBottom: '1rem', fontWeight: 'bold' }}>Comparativo por Marketplace</h3>
                     <div style={{ height: '300px' }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={mpChartData}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                <XAxis dataKey="name" stroke="#94a3b8" />
-                                <YAxis stroke="#94a3b8" />
-                                <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }} />
-                                <Bar dataKey="avg" name="Preço Médio" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                                <Bar dataKey="min" name="Menor Preço" fill="#10b981" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
+                        {mpChartData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={mpChartData}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                    <XAxis dataKey="name" stroke="#94a3b8" />
+                                    <YAxis stroke="#94a3b8" />
+                                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }} />
+                                    <Bar dataKey="avg" name="Preço Médio" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="min" name="Menor Preço" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <EmptyState message="Sem dados comparativos." />
+                        )}
                     </div>
                 </div>
 
@@ -115,15 +129,19 @@ export default function AnalyticsDashboard({ results, history }: { results: any[
                 <div className="card">
                     <h3 style={{ marginBottom: '1rem', fontWeight: 'bold' }}>Top 10 Lojas (Mais Ofertas)</h3>
                     <div style={{ height: '300px' }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={storeChartData} layout="vertical">
-                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                                <XAxis type="number" stroke="#94a3b8" />
-                                <YAxis dataKey="name" type="category" width={100} stroke="#94a3b8" style={{ fontSize: '0.75rem' }} />
-                                <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }} />
-                                <Bar dataKey="count" name="Ofertas" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
+                        {storeChartData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={storeChartData} layout="vertical">
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                    <XAxis type="number" stroke="#94a3b8" />
+                                    <YAxis dataKey="name" type="category" width={100} stroke="#94a3b8" style={{ fontSize: '0.75rem' }} />
+                                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }} />
+                                    <Bar dataKey="count" name="Ofertas" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <EmptyState message="Nenhuma loja identificada." />
+                        )}
                     </div>
                 </div>
 
@@ -131,25 +149,29 @@ export default function AnalyticsDashboard({ results, history }: { results: any[
                 <div className="card">
                     <h3 style={{ marginBottom: '1rem', fontWeight: 'bold' }}>Distribuição de Avaliações</h3>
                     <div style={{ height: '300px' }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={ratingChartData}
-                                    cx="50%"
-                                    cy="50%"
-                                    labelLine={false}
-                                    outerRadius={80}
-                                    fill="#8884d8"
-                                    dataKey="value"
-                                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                >
-                                    {ratingChartData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }} />
-                            </PieChart>
-                        </ResponsiveContainer>
+                        {ratingChartData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={ratingChartData}
+                                        cx="50%"
+                                        cy="50%"
+                                        labelLine={false}
+                                        outerRadius={80}
+                                        fill="#8884d8"
+                                        dataKey="value"
+                                        label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                                    >
+                                        {ratingChartData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc' }} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <EmptyState message="Sem dados de avaliação." />
+                        )}
                     </div>
                 </div>
 
@@ -157,34 +179,38 @@ export default function AnalyticsDashboard({ results, history }: { results: any[
                 <div className="card" style={{ gridColumn: 'span 2' }}>
                     <h3 style={{ marginBottom: '1rem', fontWeight: 'bold' }}>Top 10 Menores Ofertas</h3>
                     <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-                            <thead>
-                                <tr style={{ borderBottom: '1px solid #334155', textAlign: 'left' }}>
-                                    <th style={{ padding: '0.75rem' }}>Produto</th>
-                                    <th style={{ padding: '0.75rem' }}>Loja</th>
-                                    <th style={{ padding: '0.75rem' }}>Marketplace</th>
-                                    <th style={{ padding: '0.75rem' }}>Preço</th>
-                                    <th style={{ padding: '0.75rem' }}>Link</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {lowestOffers.map((offer: any, i: number) => (
-                                    <tr key={i} style={{ borderBottom: '1px solid #1e293b' }}>
-                                        <td style={{ padding: '0.75rem' }}>{offer.title.substring(0, 50)}...</td>
-                                        <td style={{ padding: '0.75rem' }}>{offer.sellerName || '-'}</td>
-                                        <td style={{ padding: '0.75rem' }}>{offer.marketplace}</td>
-                                        <td style={{ padding: '0.75rem', color: '#10b981', fontWeight: 'bold' }}>
-                                            R$ {offer.price.toFixed(2)}
-                                        </td>
-                                        <td style={{ padding: '0.75rem' }}>
-                                            <a href={offer.link} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6' }}>
-                                                Ver
-                                            </a>
-                                        </td>
+                        {lowestOffers.length > 0 ? (
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                                <thead>
+                                    <tr style={{ borderBottom: '1px solid #334155', textAlign: 'left' }}>
+                                        <th style={{ padding: '0.75rem' }}>Produto</th>
+                                        <th style={{ padding: '0.75rem' }}>Loja</th>
+                                        <th style={{ padding: '0.75rem' }}>Marketplace</th>
+                                        <th style={{ padding: '0.75rem' }}>Preço</th>
+                                        <th style={{ padding: '0.75rem' }}>Link</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {lowestOffers.map((offer: any, i: number) => (
+                                        <tr key={i} style={{ borderBottom: '1px solid #1e293b' }}>
+                                            <td style={{ padding: '0.75rem' }}>{offer.title.substring(0, 50)}...</td>
+                                            <td style={{ padding: '0.75rem' }}>{offer.sellerName || '-'}</td>
+                                            <td style={{ padding: '0.75rem' }}>{offer.marketplace}</td>
+                                            <td style={{ padding: '0.75rem', color: '#10b981', fontWeight: 'bold' }}>
+                                                R$ {offer.price.toFixed(2)}
+                                            </td>
+                                            <td style={{ padding: '0.75rem' }}>
+                                                <a href={offer.link} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6' }}>
+                                                    Ver
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        ) : (
+                            <EmptyState message="Nenhuma oferta encontrada." />
+                        )}
                     </div>
                 </div>
 

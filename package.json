@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@types/node-cron": "^3.0.11",
+    "dotenv": "^17.2.3",
     "duckdb": "^1.4.2",
     "framer-motion": "^12.23.25",
     "groq-sdk": "^0.37.0",

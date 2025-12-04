@@ -108,13 +108,11 @@ export async function createSearchJob(productId: string, scheduledFor?: Date) {
 
     // Only trigger immediately if not scheduled
     if (!scheduledFor) {
-        setTimeout(() => {
-            runScraper(job.id, product.name).catch(console.error)
-        }, 100)
+        // Run in background without awaiting
+        runScraper(job.id, product.name).catch(console.error)
     }
 
     revalidatePath('/jobs')
-    // redirect('/jobs') // Don't redirect, let the UI handle it or stay on page
 }
 
 export async function deleteJob(formData: FormData) {
@@ -327,4 +325,32 @@ export async function startBulkSearch(formData: FormData) {
 
     revalidatePath('/jobs')
     redirect('/jobs')
+}
+
+export async function processPendingJobs() {
+    const now = new Date()
+
+    // Find jobs that are PENDING or SCHEDULED for the past
+    const jobsToRun = await prisma.searchJob.findMany({
+        where: {
+            OR: [
+                { status: 'PENDING' },
+                {
+                    status: 'SCHEDULED',
+                    scheduledFor: { lte: now }
+                }
+            ]
+        },
+        include: { product: true }
+    })
+
+    console.log(`Found ${jobsToRun.length} jobs to process.`)
+
+    for (const job of jobsToRun) {
+        // Run in background
+        runScraper(job.id, job.product.name).catch(console.error)
+    }
+
+    revalidatePath('/jobs')
+    revalidatePath('/')
 }

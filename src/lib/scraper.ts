@@ -117,7 +117,7 @@ export async function runScraper(jobId: string, productName: string, options?: {
                             if (!image) image = item.querySelector('img.poly-component__picture')?.getAttribute('src')
 
                             let location = item.querySelector('.ui-search-item__location, .poly-component__location')?.textContent?.trim()
-                            let seller = item.querySelector('.ui-search-official-store-label, .poly-component__seller')?.textContent?.trim()
+                            let seller = item.querySelector('.ui-search-official-store-label, .poly-component__seller, .ui-search-item__group__element--seller')?.textContent?.trim()
                             if (seller && seller.startsWith('por ')) seller = seller.replace('por ', '')
 
                             if (title && priceText && link) {

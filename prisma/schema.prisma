@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["multiSchema"]
 }
 
@@ -10,74 +10,71 @@ datasource db {
 }
 
 model Product {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  costPrice   Decimal  @map("cost_price")
-  weight      Float?
-  dimensions  String?
-  originCep   String?  @map("origin_cep")
-  category    String?
-  brand       String?
-  imageUrl    String?  @map("image_url")
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  lastBestPrice Decimal? @map("last_best_price")
-  lastBestPriceDate DateTime? @map("last_best_price_date")
-
-  searchJobs  SearchJob[]
+  id                String      @id @default(uuid())
+  name              String
+  description       String?
+  costPrice         Decimal     @map("cost_price")
+  weight            Float?
+  dimensions        String?
+  originCep         String?     @map("origin_cep")
+  category          String?
+  brand             String?
+  imageUrl          String?     @map("image_url")
+  active            Boolean     @default(true)
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+  lastBestPrice     Decimal?    @map("last_best_price")
+  lastBestPriceDate DateTime?   @map("last_best_price_date")
+  searchJobs        SearchJob[]
 
   @@schema("marketplaces")
 }
 
 model SearchJob {
-  id        String   @id @default(uuid())
-  productId String   @map("product_id")
-  status    String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  scheduledFor DateTime? @map("scheduled_for")
-
-  product   Product  @relation(fields: [productId], references: [id])
-  results   SearchResult[]
+  id           String         @id @default(uuid())
+  productId    String         @map("product_id")
+  status       String
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+  scheduledFor DateTime?      @map("scheduled_for")
+  product      Product        @relation(fields: [productId], references: [id])
+  results      SearchResult[]
 
   @@schema("marketplaces")
 }
 
 model SearchResult {
-  id             String   @id @default(uuid())
-  jobId          String   @map("job_id")
+  id             String    @id @default(uuid())
+  jobId          String    @map("job_id")
   marketplace    String
   title          String
   price          Decimal
   shipping       Decimal?
   link           String
-  sellerName     String?  @map("seller_name")
-  sellerLocation String?  @map("seller_location")
-  sellerRating   String?  @map("seller_rating")
-  imageUrl       String?  @map("image_url")
-  matchScore     Int?     @map("match_score")
-  matchReasoning String?  @map("match_reasoning")
-  normalizedName String?  @map("normalized_name")
+  sellerName     String?   @map("seller_name")
+  sellerLocation String?   @map("seller_location")
+  sellerRating   String?   @map("seller_rating")
+  imageUrl       String?   @map("image_url")
+  matchScore     Int?      @map("match_score")
+  matchReasoning String?   @map("match_reasoning")
+  normalizedName String?   @map("normalized_name")
   city           String?
   state          String?
   installments   String?
-  quantitySold   String?  @map("quantity_sold")
-  reviewScore    String?  @map("review_score")
-  collectedAt    DateTime @default(now()) @map("collected_at")
-
+  quantitySold   String?   @map("quantity_sold")
+  reviewScore    String?   @map("review_score")
+  collectedAt    DateTime  @default(now()) @map("collected_at")
   job            SearchJob @relation(fields: [jobId], references: [id])
 
   @@schema("marketplaces")
 }
 
 model Settings {
-  id          String   @id @default(uuid())
-  aiProvider  String   @default("openai") // openai, groq, openrouter, deepseek
-  aiModel     String   @default("gpt-4o-mini")
-  aiApiKey    String   @default("")
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  aiProvider String   @default("openai")
+  aiModel    String   @default("gpt-4o-mini")
+  aiApiKey   String   @default("")
+  updatedAt  DateTime @updatedAt
 
   @@schema("marketplaces")
 }

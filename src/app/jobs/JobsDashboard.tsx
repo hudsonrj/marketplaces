@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, RefreshCw, Eye, Clock, Trash2, Edit, Plus, Calendar, X, Save } from 'lucide-react'
-import { createSearchJob, deleteJob, updateJob } from '../actions'
+import { Search, RefreshCw, Eye, Clock, Trash2, Edit, Plus, Calendar, X, Save, Play } from 'lucide-react'
+import { createSearchJob, deleteJob, updateJob, processPendingJobs } from '../actions'
 
 interface Job {
     id: string
@@ -11,6 +12,7 @@ interface Job {
     status: string
     createdAt: Date
     scheduledFor: Date | null
+    updatedAt: Date
     product: {
         name: string
     }
@@ -23,8 +25,10 @@ interface Product {
 }
 
 export default function JobsDashboard({ initialJobs, products }: { initialJobs: Job[], products: Product[] }) {
+    const router = useRouter()
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
     const [editingJob, setEditingJob] = useState<Job | null>(null)
+    const [isProcessing, setIsProcessing] = useState(false)
 
     // Create Form State
     const [selectedProductId, setSelectedProductId] = useState('')
@@ -33,6 +37,18 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
     // Edit Form State
     const [editStatus, setEditStatus] = useState('')
     const [editDate, setEditDate] = useState('')
+
+    // Auto-refresh if there are running jobs
+    useEffect(() => {
+        const hasRunningJobs = initialJobs.some(job => job.status === 'RUNNING' || job.status === 'PENDING')
+        if (!hasRunningJobs) return
+
+        const interval = setInterval(() => {
+            router.refresh()
+        }, 5000)
+
+        return () => clearInterval(interval)
+    }, [initialJobs, router])
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -58,6 +74,17 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
         setEditingJob(null)
     }
 
+    const handleProcessQueue = async () => {
+        setIsProcessing(true)
+        try {
+            await processPendingJobs()
+        } catch (error) {
+            console.error(error)
+        } finally {
+            setIsProcessing(false)
+        }
+    }
+
     const openEditModal = (job: Job) => {
         setEditingJob(job)
         setEditStatus(job.status)
@@ -73,10 +100,25 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
                     </h1>
                     <p style={{ color: '#94a3b8' }}>Histórico e agendamento de execuções.</p>
                 </div>
-                <button onClick={() => setIsCreateModalOpen(true)} className="btn btn-primary">
-                    <Plus size={18} />
-                    Nova Busca
-                </button>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                    <button
+                        onClick={handleProcessQueue}
+                        disabled={isProcessing}
+                        className="btn-secondary"
+                        title="Processar Fila (Executar Pendentes)"
+                        style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}
+                    >
+                        <Play size={18} className={isProcessing ? 'animate-spin' : ''} />
+                        {isProcessing ? 'Processando...' : 'Rodar Pendentes'}
+                    </button>
+                    <button onClick={() => router.refresh()} className="btn-secondary" title="Atualizar Lista">
+                        <RefreshCw size={18} />
+                    </button>
+                    <button onClick={() => setIsCreateModalOpen(true)} className="btn btn-primary">
+                        <Plus size={18} />
+                        Nova Busca
+                    </button>
+                </div>
             </div>
 
             <div className="glass-panel" style={{ overflow: 'hidden' }}>
@@ -92,72 +134,82 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
                         </tr>
                     </thead>
                     <tbody>
-                        {initialJobs.map((job) => (
-                            <tr key={job.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s' }}>
-                                <td style={{ padding: '1rem', color: '#cbd5e1', fontSize: '0.9rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <Clock size={14} color="#64748b" />
-                                        {new Date(job.createdAt).toLocaleString('pt-BR')}
-                                    </div>
-                                </td>
-                                <td style={{ padding: '1rem', color: '#cbd5e1', fontSize: '0.9rem' }}>
-                                    {job.scheduledFor ? (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#fbbf24' }}>
-                                            <Calendar size={14} />
-                                            {new Date(job.scheduledFor).toLocaleString('pt-BR')}
+                        {initialJobs.map((job) => {
+                            const isStuck = job.status === 'RUNNING' && new Date().getTime() - new Date(job.updatedAt).getTime() > 1000 * 60 * 10 // 10 mins
+                            return (
+                                <tr key={job.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.2s' }}>
+                                    <td style={{ padding: '1rem', color: '#cbd5e1', fontSize: '0.9rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <Clock size={14} color="#64748b" />
+                                            {new Date(job.createdAt).toLocaleString('pt-BR')}
                                         </div>
-                                    ) : '-'}
-                                </td>
-                                <td style={{ padding: '1rem', fontWeight: '500' }}>{job.product.name}</td>
-                                <td style={{ padding: '1rem' }}>
-                                    <span style={{
-                                        padding: '0.25rem 0.75rem',
-                                        borderRadius: '20px',
-                                        fontSize: '0.75rem',
-                                        fontWeight: '600',
-                                        background: job.status === 'COMPLETED' ? 'rgba(16, 185, 129, 0.1)' :
-                                            job.status === 'RUNNING' ? 'rgba(59, 130, 246, 0.1)' :
-                                                job.status === 'FAILED' ? 'rgba(239, 68, 68, 0.1)' :
-                                                    job.status === 'SCHEDULED' ? 'rgba(251, 191, 36, 0.1)' :
-                                                        'rgba(148, 163, 184, 0.1)',
-                                        color: job.status === 'COMPLETED' ? '#10b981' :
-                                            job.status === 'RUNNING' ? '#3b82f6' :
-                                                job.status === 'FAILED' ? '#ef4444' :
-                                                    job.status === 'SCHEDULED' ? '#fbbf24' :
-                                                        '#94a3b8',
-                                        border: `1px solid ${job.status === 'COMPLETED' ? 'rgba(16, 185, 129, 0.2)' :
-                                            job.status === 'RUNNING' ? 'rgba(59, 130, 246, 0.2)' :
-                                                job.status === 'FAILED' ? 'rgba(239, 68, 68, 0.2)' :
-                                                    job.status === 'SCHEDULED' ? 'rgba(251, 191, 36, 0.2)' :
-                                                        'rgba(148, 163, 184, 0.2)'
-                                            }`
-                                    }}>
-                                        {job.status}
-                                    </span>
-                                </td>
-                                <td style={{ padding: '1rem', color: '#cbd5e1' }}>
-                                    {job.results.length} itens
-                                </td>
-                                <td style={{ padding: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                                    <Link href={`/jobs/${job.id}`}>
-                                        <button className="btn-icon" title="Ver Detalhes">
-                                            <Eye size={16} />
-                                        </button>
-                                    </Link>
+                                    </td>
+                                    <td style={{ padding: '1rem', color: '#cbd5e1', fontSize: '0.9rem' }}>
+                                        {job.scheduledFor ? (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#fbbf24' }}>
+                                                <Calendar size={14} />
+                                                {new Date(job.scheduledFor).toLocaleString('pt-BR')}
+                                            </div>
+                                        ) : '-'}
+                                    </td>
+                                    <td style={{ padding: '1rem', fontWeight: '500' }}>{job.product.name}</td>
+                                    <td style={{ padding: '1rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <span style={{
+                                                padding: '0.25rem 0.75rem',
+                                                borderRadius: '20px',
+                                                fontSize: '0.75rem',
+                                                fontWeight: '600',
+                                                background: job.status === 'COMPLETED' ? 'rgba(16, 185, 129, 0.1)' :
+                                                    job.status === 'RUNNING' ? 'rgba(59, 130, 246, 0.1)' :
+                                                        job.status === 'FAILED' ? 'rgba(239, 68, 68, 0.1)' :
+                                                            job.status === 'SCHEDULED' ? 'rgba(251, 191, 36, 0.1)' :
+                                                                'rgba(148, 163, 184, 0.1)',
+                                                color: job.status === 'COMPLETED' ? '#10b981' :
+                                                    job.status === 'RUNNING' ? '#3b82f6' :
+                                                        job.status === 'FAILED' ? '#ef4444' :
+                                                            job.status === 'SCHEDULED' ? '#fbbf24' :
+                                                                '#94a3b8',
+                                                border: `1px solid ${job.status === 'COMPLETED' ? 'rgba(16, 185, 129, 0.2)' :
+                                                    job.status === 'RUNNING' ? 'rgba(59, 130, 246, 0.2)' :
+                                                        job.status === 'FAILED' ? 'rgba(239, 68, 68, 0.2)' :
+                                                            job.status === 'SCHEDULED' ? 'rgba(251, 191, 36, 0.2)' :
+                                                                'rgba(148, 163, 184, 0.2)'
+                                                    }`
+                                            }}>
+                                                {job.status}
+                                            </span>
+                                            {isStuck && (
+                                                <span title="Este job parece estar travado (rodando há mais de 10min). Pode ter sido interrompido." style={{ cursor: 'help' }}>
+                                                    ⚠️
+                                                </span>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td style={{ padding: '1rem', color: '#cbd5e1' }}>
+                                        {job.results.length} itens
+                                    </td>
+                                    <td style={{ padding: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                        <Link href={`/jobs/${job.id}`}>
+                                            <button className="btn-icon" title="Ver Detalhes">
+                                                <Eye size={16} />
+                                            </button>
+                                        </Link>
 
-                                    <button onClick={() => openEditModal(job)} className="btn-icon" title="Editar">
-                                        <Edit size={16} />
-                                    </button>
-
-                                    <form action={deleteJob}>
-                                        <input type="hidden" name="id" value={job.id} />
-                                        <button className="btn-icon" style={{ color: '#ef4444' }} title="Excluir">
-                                            <Trash2 size={16} />
+                                        <button onClick={() => openEditModal(job)} className="btn-icon" title="Editar">
+                                            <Edit size={16} />
                                         </button>
-                                    </form>
-                                </td>
-                            </tr>
-                        ))}
+
+                                        <form action={deleteJob}>
+                                            <input type="hidden" name="id" value={job.id} />
+                                            <button className="btn-icon" style={{ color: '#ef4444' }} title="Excluir">
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            )
+                        })}
                     </tbody>
                 </table>
             </div>
