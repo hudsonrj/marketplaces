@@ -13,12 +13,12 @@ async function main() {
   // Check if Settings model exists in schema (it does based on view_file)
   // But wait, I need to be sure the client is generated with it.
   // The schema I saw has Settings.
-  let settings = [];
+  let settings: any[] = [];
   try {
-      // @ts-ignore
-      settings = await prisma.settings.findMany();
+    // @ts-ignore
+    settings = await prisma.settings.findMany();
   } catch (e) {
-      console.log('Settings table might not exist or be accessible yet.');
+    console.log('Settings table might not exist or be accessible yet.');
   }
 
   const data = {

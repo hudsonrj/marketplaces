@@ -72,7 +72,7 @@ export async function getSettings() {
     }
 }
 
-export async function updateSettings(data: { aiProvider: string, aiModel: string, aiApiKey: string }) {
+export async function updateSettings(data: { aiProvider: string, aiModel: string, aiApiKey: string, proxyUrl?: string }) {
     try {
         const settings = await prisma.settings.findFirst()
         if (settings) {

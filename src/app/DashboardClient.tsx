@@ -11,7 +11,7 @@ import { motion } from "framer-motion"
 import {
     Activity, Search, Package, TrendingUp, TrendingDown,
     Clock, Globe, ShoppingCart, AlertCircle, CheckCircle2,
-    Play, Pause, Zap, Trash2
+    Play, Pause, Zap, Trash2, ArrowLeft
 } from 'lucide-react'
 import { deleteJob } from './actions'
 
@@ -148,6 +148,27 @@ export default function DashboardClient({
                 />
             </div>
 
+            {/* Strategy Banner */}
+            <Link href="/strategy">
+                <motion.div
+                    whileHover={{ scale: 1.01 }}
+                    className="glass-panel p-6 bg-gradient-to-r from-blue-900/40 to-slate-900 border border-blue-500/30 flex items-center justify-between cursor-pointer group"
+                >
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-blue-500/20 rounded-full text-blue-400 group-hover:bg-blue-500 group-hover:text-white transition-all">
+                            <TrendingUp size={24} />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-bold text-white">Estratégia de Preços & Análise</h3>
+                            <p className="text-slate-400">Defina preços ideais, calcule margens e analise concorrentes com IA.</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-blue-400 font-medium group-hover:translate-x-2 transition-transform">
+                        Acessar Ferramenta <ArrowLeft className="rotate-180" size={20} />
+                    </div>
+                </motion.div>
+            </Link>
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Activity Chart */}
                 <div className="lg:col-span-2 glass-panel p-6">
@@ -242,8 +263,8 @@ export default function DashboardClient({
                             <div key={job.id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
                                 <div className="flex items-center gap-3">
                                     <div className={`p-2 rounded-lg ${job.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400' :
-                                            job.status === 'FAILED' ? 'bg-red-500/10 text-red-400' :
-                                                'bg-blue-500/10 text-blue-400'
+                                        job.status === 'FAILED' ? 'bg-red-500/10 text-red-400' :
+                                            'bg-blue-500/10 text-blue-400'
                                         }`}>
                                         {job.status === 'COMPLETED' ? <CheckCircle2 size={16} /> :
                                             job.status === 'FAILED' ? <AlertCircle size={16} /> :
@@ -258,8 +279,8 @@ export default function DashboardClient({
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <span className={`text-xs font-medium px-2 py-1 rounded-full ${job.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400' :
-                                            job.status === 'FAILED' ? 'bg-red-500/10 text-red-400' :
-                                                'bg-blue-500/10 text-blue-400'
+                                        job.status === 'FAILED' ? 'bg-red-500/10 text-red-400' :
+                                            'bg-blue-500/10 text-blue-400'
                                         }`}>
                                         {job.status}
                                     </span>

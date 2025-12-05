@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { backupDatabase, listBackups, restoreDatabase, getSettings, updateSettings, testAIConnection } from './actions'
-import { Save, RotateCcw, Database, Check, AlertTriangle, Bot } from 'lucide-react'
+import { Save, RotateCcw, Database, Check, AlertTriangle, Bot, Globe } from 'lucide-react'
 
 export default function SettingsPage() {
     const [backups, setBackups] = useState<string[]>([])
@@ -14,7 +14,8 @@ export default function SettingsPage() {
     const [aiSettings, setAiSettings] = useState({
         aiProvider: 'openai',
         aiModel: 'gpt-4o-mini',
-        aiApiKey: ''
+        aiApiKey: '',
+        proxyUrl: ''
     })
 
     useEffect(() => {
@@ -23,12 +24,13 @@ export default function SettingsPage() {
     }, [])
 
     const loadSettings = async () => {
-        const settings = await getSettings()
+        const settings = await getSettings() as any
         if (settings) {
             setAiSettings({
                 aiProvider: settings.aiProvider,
                 aiModel: settings.aiModel,
-                aiApiKey: settings.aiApiKey
+                aiApiKey: settings.aiApiKey,
+                proxyUrl: settings.proxyUrl || ''
             })
         }
     }
@@ -114,7 +116,31 @@ export default function SettingsPage() {
                 </div>
 
                 <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <div>
+                    {/* Proxy Settings */}
+                    <div style={{ padding: '1.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <h4 style={{ color: '#fff', fontSize: '1rem', fontWeight: '600', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Globe size={18} className="text-blue-400" />
+                            Configuração de Proxy (Opcional)
+                        </h4>
+                        <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                            Use um proxy residencial para desbloquear sites como Casas Bahia, Americanas e Shopee.
+                        </p>
+                        <label style={{ display: 'block', color: '#e2e8f0', marginBottom: '0.5rem', fontSize: '0.875rem' }}>URL do Proxy</label>
+                        <input
+                            type="text"
+                            value={aiSettings.proxyUrl}
+                            onChange={e => setAiSettings({ ...aiSettings, proxyUrl: e.target.value })}
+                            placeholder="http://user:pass@host:port"
+                            style={{
+                                width: '100%', padding: '0.75rem', borderRadius: '8px',
+                                background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)',
+                                color: 'white', outline: 'none', fontFamily: 'monospace'
+                            }}
+                        />
+                    </div>
+
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem' }}>
+                        <h4 style={{ color: '#fff', fontSize: '1rem', fontWeight: '600', marginBottom: '1rem' }}>Configuração da IA</h4>
                         <label style={{ display: 'block', color: '#e2e8f0', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Provedor</label>
                         <select
                             value={aiSettings.aiProvider}
@@ -271,6 +297,6 @@ export default function SettingsPage() {
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     )
 }

@@ -92,7 +92,7 @@ export async function getProducts() {
     })
 }
 
-export async function createSearchJob(productId: string, scheduledFor?: Date) {
+export async function createSearchJob(productId: string, scheduledFor?: Date, marketplaces: string[] = []) {
     const product = await prisma.product.findUnique({ where: { id: productId } })
     if (!product) throw new Error('Product not found')
 
@@ -109,7 +109,7 @@ export async function createSearchJob(productId: string, scheduledFor?: Date) {
     // Only trigger immediately if not scheduled
     if (!scheduledFor) {
         // Run in background without awaiting
-        runScraper(job.id, product.name).catch(console.error)
+        runScraper(job.id, product.name, { marketplaces }).catch(console.error)
     }
 
     revalidatePath('/jobs')

@@ -10,13 +10,36 @@ interface Job {
     id: string
     productId: string
     status: string
-    createdAt: Date
-    scheduledFor: Date | null
-    updatedAt: Date
+    progress: number
+    logs: any
+    createdAt: string
+    scheduledFor: string | null
+    updatedAt: string
     product: {
         name: string
     }
-    results: any[]
+    results: {
+        id: string
+        jobId: string
+        marketplace: string
+        title: string
+        price: number
+        shipping: number | null
+        link: string
+        sellerName: string | null
+        sellerLocation: string | null
+        sellerRating: string | null
+        imageUrl: string | null
+        matchScore: number | null
+        matchReasoning: string | null
+        normalizedName: string | null
+        city: string | null
+        state: string | null
+        installments: string | null
+        quantitySold: string | null
+        reviewScore: string | null
+        collectedAt: string
+    }[]
 }
 
 interface Product {
@@ -28,11 +51,13 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
     const router = useRouter()
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
     const [editingJob, setEditingJob] = useState<Job | null>(null)
+    const [viewLogsJob, setViewLogsJob] = useState<Job | null>(null)
     const [isProcessing, setIsProcessing] = useState(false)
 
     // Create Form State
     const [selectedProductId, setSelectedProductId] = useState('')
     const [scheduleDate, setScheduleDate] = useState('')
+    const [selectedMarketplaces, setSelectedMarketplaces] = useState<string[]>(['MERCADO_LIVRE', 'AMAZON', 'SHOPEE', 'MAGALU', 'CASAS_BAHIA', 'AMERICANAS', 'KABUM'])
 
     // Edit Form State
     const [editStatus, setEditStatus] = useState('')
@@ -55,10 +80,11 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
         if (!selectedProductId) return
 
         const date = scheduleDate ? new Date(scheduleDate) : undefined
-        await createSearchJob(selectedProductId, date)
+        await createSearchJob(selectedProductId, date, selectedMarketplaces)
         setIsCreateModalOpen(false)
         setSelectedProductId('')
         setScheduleDate('')
+        setSelectedMarketplaces(['MERCADO_LIVRE', 'AMAZON', 'SHOPEE', 'MAGALU', 'CASAS_BAHIA', 'AMERICANAS', 'KABUM'])
     }
 
     const handleUpdate = async (e: React.FormEvent) => {
@@ -154,35 +180,42 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
                                     </td>
                                     <td style={{ padding: '1rem', fontWeight: '500' }}>{job.product.name}</td>
                                     <td style={{ padding: '1rem' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            <span style={{
-                                                padding: '0.25rem 0.75rem',
-                                                borderRadius: '20px',
-                                                fontSize: '0.75rem',
-                                                fontWeight: '600',
-                                                background: job.status === 'COMPLETED' ? 'rgba(16, 185, 129, 0.1)' :
-                                                    job.status === 'RUNNING' ? 'rgba(59, 130, 246, 0.1)' :
-                                                        job.status === 'FAILED' ? 'rgba(239, 68, 68, 0.1)' :
-                                                            job.status === 'SCHEDULED' ? 'rgba(251, 191, 36, 0.1)' :
-                                                                'rgba(148, 163, 184, 0.1)',
-                                                color: job.status === 'COMPLETED' ? '#10b981' :
-                                                    job.status === 'RUNNING' ? '#3b82f6' :
-                                                        job.status === 'FAILED' ? '#ef4444' :
-                                                            job.status === 'SCHEDULED' ? '#fbbf24' :
-                                                                '#94a3b8',
-                                                border: `1px solid ${job.status === 'COMPLETED' ? 'rgba(16, 185, 129, 0.2)' :
-                                                    job.status === 'RUNNING' ? 'rgba(59, 130, 246, 0.2)' :
-                                                        job.status === 'FAILED' ? 'rgba(239, 68, 68, 0.2)' :
-                                                            job.status === 'SCHEDULED' ? 'rgba(251, 191, 36, 0.2)' :
-                                                                'rgba(148, 163, 184, 0.2)'
-                                                    }`
-                                            }}>
-                                                {job.status}
-                                            </span>
-                                            {isStuck && (
-                                                <span title="Este job parece estar travado (rodando há mais de 10min). Pode ter sido interrompido." style={{ cursor: 'help' }}>
-                                                    ⚠️
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span style={{
+                                                    padding: '0.25rem 0.75rem',
+                                                    borderRadius: '20px',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: '600',
+                                                    background: job.status === 'COMPLETED' ? 'rgba(16, 185, 129, 0.1)' :
+                                                        job.status === 'RUNNING' ? 'rgba(59, 130, 246, 0.1)' :
+                                                            job.status === 'FAILED' ? 'rgba(239, 68, 68, 0.1)' :
+                                                                job.status === 'SCHEDULED' ? 'rgba(251, 191, 36, 0.1)' :
+                                                                    'rgba(148, 163, 184, 0.1)',
+                                                    color: job.status === 'COMPLETED' ? '#10b981' :
+                                                        job.status === 'RUNNING' ? '#3b82f6' :
+                                                            job.status === 'FAILED' ? '#ef4444' :
+                                                                job.status === 'SCHEDULED' ? '#fbbf24' :
+                                                                    '#94a3b8',
+                                                    border: `1px solid ${job.status === 'COMPLETED' ? 'rgba(16, 185, 129, 0.2)' :
+                                                        job.status === 'RUNNING' ? 'rgba(59, 130, 246, 0.2)' :
+                                                            job.status === 'FAILED' ? 'rgba(239, 68, 68, 0.2)' :
+                                                                job.status === 'SCHEDULED' ? 'rgba(251, 191, 36, 0.2)' :
+                                                                    'rgba(148, 163, 184, 0.2)'
+                                                        }`
+                                                }}>
+                                                    {job.status}
                                                 </span>
+                                                {isStuck && (
+                                                    <span title="Este job parece estar travado (rodando há mais de 10min). Pode ter sido interrompido." style={{ cursor: 'help' }}>
+                                                        ⚠️
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {job.status === 'RUNNING' && (
+                                                <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                                                    <div style={{ width: `${job.progress || 0}%`, height: '100%', background: '#3b82f6', transition: 'width 0.5s ease' }} />
+                                                </div>
                                             )}
                                         </div>
                                     </td>
@@ -190,8 +223,14 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
                                         {job.results.length} itens
                                     </td>
                                     <td style={{ padding: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                        <button onClick={() => setViewLogsJob(job)} className="btn-icon" title="Ver Logs">
+                                            <div style={{ position: 'relative' }}>
+                                                <Clock size={16} />
+                                                {job.status === 'RUNNING' && <span style={{ position: 'absolute', top: -2, right: -2, width: 6, height: 6, background: '#3b82f6', borderRadius: '50%' }} />}
+                                            </div>
+                                        </button>
                                         <Link href={`/jobs/${job.id}`}>
-                                            <button className="btn-icon" title="Ver Detalhes">
+                                            <button className="btn-icon" title="Ver Resultados">
                                                 <Eye size={16} />
                                             </button>
                                         </Link>
@@ -213,6 +252,37 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
                     </tbody>
                 </table>
             </div>
+
+            {/* Logs Modal */}
+            {viewLogsJob && (
+                <div className="modal-overlay">
+                    <div className="modal-content glass-panel" style={{ maxWidth: '600px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: '600' }}>Logs da Busca</h2>
+                            <button onClick={() => setViewLogsJob(null)}><X size={20} /></button>
+                        </div>
+                        <div style={{ maxHeight: '400px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            {viewLogsJob.logs && Array.isArray(viewLogsJob.logs) && viewLogsJob.logs.length > 0 ? (
+                                viewLogsJob.logs.slice().reverse().map((log: any, index: number) => (
+                                    <div key={index} style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', borderLeft: '3px solid #3b82f6' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                                {new Date(log.timestamp).toLocaleTimeString()}
+                                            </span>
+                                            <span style={{ fontSize: '0.75rem', color: '#3b82f6', fontWeight: 'bold' }}>
+                                                {log.progress}%
+                                            </span>
+                                        </div>
+                                        <p style={{ fontSize: '0.9rem', color: '#e2e8f0', margin: 0 }}>{log.message}</p>
+                                    </div>
+                                ))
+                            ) : (
+                                <p style={{ color: '#94a3b8', textAlign: 'center', padding: '2rem' }}>Nenhum log disponível.</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Create Modal */}
             {isCreateModalOpen && (
@@ -238,6 +308,28 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
                                     ))}
                                 </select>
                             </div>
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8' }}>Marketplaces</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                                    {['MERCADO_LIVRE', 'AMAZON', 'SHOPEE', 'MAGALU', 'CASAS_BAHIA', 'AMERICANAS', 'KABUM'].map(mp => (
+                                        <label key={mp} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#cbd5e1', cursor: 'pointer' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedMarketplaces.includes(mp)}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) {
+                                                        setSelectedMarketplaces([...selectedMarketplaces, mp])
+                                                    } else {
+                                                        setSelectedMarketplaces(selectedMarketplaces.filter(m => m !== mp))
+                                                    }
+                                                }}
+                                                style={{ accentColor: '#3b82f6' }}
+                                            />
+                                            {mp.replace('_', ' ')}
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
                             <div style={{ marginBottom: '1.5rem' }}>
                                 <label style={{ display: 'block', marginBottom: '0.5rem', color: '#94a3b8' }}>Agendar para (Opcional)</label>
                                 <input
@@ -246,7 +338,8 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
                                     onChange={e => setScheduleDate(e.target.value)}
                                     className="glass-input"
                                     style={{ width: '100%' }}
-                                />
+                                >
+                                </input>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                                 <button type="button" onClick={() => setIsCreateModalOpen(false)} className="btn-secondary">Cancelar</button>

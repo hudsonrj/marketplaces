@@ -2,6 +2,7 @@ import OpenAI from 'openai'
 import { prisma } from './prisma'
 
 export async function getAIClient() {
+    console.log('AI Lib Loaded v2 - Retry Logic Active')
     const settings = await prisma.settings.findFirst()
 
     const apiKey = settings?.aiApiKey || process.env.OPENAI_API_KEY || ''
@@ -156,4 +157,79 @@ export async function checkProductDuplication(
         console.error('Duplication check failed:', error)
         return { isDuplicate: false, reasoning: 'Error during check.' }
     }
+}
+export async function smartParseProductBatch(
+    htmlSnippets: string[],
+    marketplace: string
+): Promise<Array<{
+    title: string;
+    price: number;
+    link: string;
+    image: string;
+    seller: string | null;
+    location: string | null;
+    condition: string | null;
+}>> {
+    let retries = 3
+    while (retries > 0) {
+        try {
+            const { client, model } = await getAIClient()
+
+            const prompt = `
+            You are a specialized HTML parser for e-commerce sites.
+            I will provide a list of raw HTML/Text snippets from product cards on ${marketplace}.
+            
+            Your task is to extract structured data for each item.
+            
+            Snippets:
+            ${JSON.stringify(htmlSnippets)}
+            
+            Requirements:
+            1. Extract the full Product Title.
+            2. Extract the Price (numeric). If multiple prices exist, prefer the main/current price.
+            3. Extract the Product Link (href). If relative, return as is.
+            4. Extract the Image URL (src).
+            5. Extract the Seller Name (e.g., "Sold by Store X", "Loja Oficial"). If not found, return null.
+            6. Extract the Location (e.g., "São Paulo, SP"). If not found, return null.
+            7. Extract the Condition (e.g., "Novo", "Usado", "Recondicionado"). Map to "new" or "used" or "refurbished". Default to "new" if not explicitly "used".
+            
+            Return ONLY a JSON array of objects with this structure:
+            [
+                {
+                    "title": "string",
+                    "price": number,
+                    "link": "string",
+                    "image": "string",
+                    "seller": "string" | null,
+                    "location": "string" | null,
+                    "condition": "string" | null
+                }
+            ]
+            `
+
+            const completion = await client.chat.completions.create({
+                messages: [{ role: "user", content: prompt }],
+                model: model,
+                response_format: { type: "json_object" }
+            })
+
+            const content = completion.choices[0].message.content
+            if (!content) throw new Error('Empty response from OpenAI')
+
+            const result = JSON.parse(content)
+            // Handle cases where the model wraps the array in a key like "products" or "items"
+            if (Array.isArray(result)) return result
+            if (result.products && Array.isArray(result.products)) return result.products
+            if (result.items && Array.isArray(result.items)) return result.items
+
+            return []
+
+        } catch (error: any) {
+            console.error(`Smart Parse failed (Attempt ${4 - retries}/3):`, error.message)
+            retries--
+            if (retries === 0) return []
+            await new Promise(res => setTimeout(res, 2000)) // Wait 2s before retry
+        }
+    }
+    return []
 }

@@ -9,16 +9,19 @@ export default async function JobsPage() {
         name: p.name
     }))
 
-    const jobs = rawJobs.map(job => ({
+    const jobs = rawJobs.map((job: any) => ({
         id: job.id,
         productId: job.productId,
         status: job.status,
-        createdAt: job.createdAt,
-        scheduledFor: job.scheduledFor,
+        progress: job.progress,
+        logs: job.logs,
+        createdAt: job.createdAt.toISOString(),
+        updatedAt: job.updatedAt.toISOString(),
+        scheduledFor: job.scheduledFor ? job.scheduledFor.toISOString() : null,
         product: {
             name: job.product.name
         },
-        results: job.results.map(r => ({
+        results: job.results.map((r: any) => ({
             id: r.id,
             jobId: r.jobId,
             marketplace: r.marketplace,
@@ -38,7 +41,7 @@ export default async function JobsPage() {
             installments: r.installments,
             quantitySold: r.quantitySold,
             reviewScore: r.reviewScore,
-            collectedAt: r.collectedAt
+            collectedAt: r.collectedAt.toISOString()
         }))
     }))
 

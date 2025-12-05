@@ -37,6 +37,8 @@ model SearchJob {
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
   scheduledFor DateTime?      @map("scheduled_for")
+  progress     Int            @default(0)
+  logs         Json?
   product      Product        @relation(fields: [productId], references: [id])
   results      SearchResult[]
 
@@ -63,6 +65,7 @@ model SearchResult {
   installments   String?
   quantitySold   String?   @map("quantity_sold")
   reviewScore    String?   @map("review_score")
+  condition      String?   @default("new")
   collectedAt    DateTime  @default(now()) @map("collected_at")
   job            SearchJob @relation(fields: [jobId], references: [id])
 
@@ -74,6 +77,7 @@ model Settings {
   aiProvider String   @default("openai")
   aiModel    String   @default("gpt-4o-mini")
   aiApiKey   String   @default("")
+  proxyUrl   String?  @default("")
   updatedAt  DateTime @updatedAt
 
   @@schema("marketplaces")
