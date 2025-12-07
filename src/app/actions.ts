@@ -1,6 +1,6 @@
 'use server'
 import { getAIClient } from '@/lib/ai'
-import { prisma } from '@/lib/prisma'
+import { prisma } from '../lib/prisma'
 import { runScraper } from '@/lib/scraper'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -406,6 +406,10 @@ export async function processNextJob() {
     })
 
     if (!job) return { processed: false, message: 'No pending jobs found' }
+
+    console.log('Processing job:', job.id)
+    console.log('Prisma SearchJob keys:', Object.keys(prisma.searchJob || {}))
+    console.log('Is update a function?', typeof prisma.searchJob.update)
 
     // Mark as RUNNING immediately
     await prisma.searchJob.update({
