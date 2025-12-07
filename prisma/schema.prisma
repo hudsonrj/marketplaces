@@ -82,3 +82,16 @@ model Settings {
 
   @@schema("marketplaces")
 }
+
+model AnalysisCache {
+  id             String   @id @default(uuid())
+  hash           String   @unique
+  matchScore     Int      @map("match_score")
+  matchReasoning String   @map("match_reasoning")
+  normalizedName String?  @map("normalized_name")
+  city           String?
+  state          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@schema("marketplaces")
+}

@@ -129,7 +129,13 @@ export async function updateJob(formData: FormData) {
 
     const data: any = {}
     if (status) data.status = status
-    if (scheduledFor) data.scheduledFor = new Date(scheduledFor)
+
+    if (scheduledFor) {
+        const date = new Date(scheduledFor)
+        if (!isNaN(date.getTime())) {
+            data.scheduledFor = date
+        }
+    }
 
     await prisma.searchJob.update({
         where: { id },
@@ -138,11 +144,14 @@ export async function updateJob(formData: FormData) {
     revalidatePath('/jobs')
 }
 
-export async function getJobs() {
+export async function getJobs(limit = 50) {
     return await prisma.searchJob.findMany({
+        take: limit,
         include: {
             product: true,
-            results: true
+            _count: {
+                select: { results: true }
+            }
         },
         orderBy: { createdAt: 'desc' }
     })
@@ -295,7 +304,7 @@ export async function askAssistant(history: { role: 'user' | 'assistant', conten
 
 export async function startBulkSearch(formData: FormData) {
     const instructions = formData.get('instructions') as string
-    const marketplaces = formData.getAll('marketplaces') as string[] // Not used yet in scraper, but good to have for future filtering
+    const marketplaces = formData.getAll('marketplaces') as string[]
 
     // Get all active products
     const products = await prisma.product.findMany({
@@ -305,26 +314,20 @@ export async function startBulkSearch(formData: FormData) {
     console.log(`Starting bulk search for ${products.length} products...`)
 
     for (const product of products) {
-        const job = await prisma.searchJob.create({
+        await prisma.searchJob.create({
             data: {
                 productId: product.id,
                 status: 'PENDING',
+                logs: [{ type: 'config', marketplaces, instructions }] // Store config in logs
             }
         })
-
-        // Trigger scraper in background
-        // We pass the category if available (product.category)
-        // And the user instructions
-        setTimeout(() => {
-            runScraper(job.id, product.name, {
-                category: product.category || undefined,
-                instructions: instructions
-            }).catch(console.error)
-        }, 100)
     }
 
+    // Trigger sequential processing in background
+    // processPendingJobs().catch(console.error) // Disabled: Unreliable on serverless/server actions
+
     revalidatePath('/jobs')
-    redirect('/jobs')
+    redirect('/jobs?autoStart=true')
 }
 
 export async function processPendingJobs() {
@@ -341,16 +344,116 @@ export async function processPendingJobs() {
                 }
             ]
         },
-        include: { product: true }
+        include: { product: true },
+        orderBy: { createdAt: 'asc' } // FIFO
     })
 
     console.log(`Found ${jobsToRun.length} jobs to process.`)
 
+    // Process sequentially to avoid resource exhaustion
     for (const job of jobsToRun) {
-        // Run in background
-        runScraper(job.id, job.product.name).catch(console.error)
+        try {
+            // Extract config from logs if available
+            let options: any = {}
+            if (Array.isArray(job.logs) && job.logs.length > 0) {
+                const configLog = job.logs.find((l: any) => l.type === 'config') as any
+                if (configLog) {
+                    options = {
+                        marketplaces: configLog.marketplaces,
+                        instructions: configLog.instructions,
+                        category: job.product.category || undefined
+                    }
+                }
+            }
+
+            // Fallback if no config found (e.g. scheduled jobs)
+            if (!options.marketplaces) {
+                options.category = job.product.category || undefined
+            }
+
+            // Run and AWAIT to ensure sequential execution
+            await runScraper(job.id, job.product.name, options)
+
+            // Small delay between jobs to let system breathe
+            await new Promise(resolve => setTimeout(resolve, 2000))
+
+        } catch (error) {
+            console.error(`Error processing job ${job.id}:`, error)
+            // Continue to next job even if one fails
+        }
     }
 
     revalidatePath('/jobs')
     revalidatePath('/')
+}
+
+export async function processNextJob() {
+    const now = new Date()
+
+    // Find ONE job to run
+    const job = await prisma.searchJob.findFirst({
+        where: {
+            OR: [
+                { status: 'PENDING' },
+                {
+                    status: 'SCHEDULED',
+                    scheduledFor: { lte: now }
+                }
+            ]
+        },
+        include: { product: true },
+        orderBy: { createdAt: 'asc' }
+    })
+
+    if (!job) return { processed: false, message: 'No pending jobs found' }
+
+    // Mark as RUNNING immediately
+    await prisma.searchJob.update({
+        where: { id: job.id },
+        data: { status: 'RUNNING' }
+    })
+
+        // Run scraper in background (Fire & Forget)
+        // We do NOT await this, so the server action returns fast.
+        // The scraper will update the status to COMPLETED/FAILED when done.
+        (async () => {
+            try {
+                // Extract config from logs if available
+                let options: any = {}
+                if (Array.isArray(job.logs) && job.logs.length > 0) {
+                    const configLog = job.logs.find((l: any) => l.type === 'config') as any
+                    if (configLog) {
+                        options = {
+                            marketplaces: configLog.marketplaces,
+                            instructions: configLog.instructions,
+                            category: job.product.category || undefined
+                        }
+                    }
+                }
+
+                // Fallback if no config found
+                if (!options.marketplaces) {
+                    options.category = job.product.category || undefined
+                }
+
+                await runScraper(job.id, job.product.name, options)
+            } catch (error) {
+                console.error(`Background scraper failed for job ${job.id}:`, error)
+                await prisma.searchJob.update({
+                    where: { id: job.id },
+                    data: { status: 'FAILED' }
+                })
+            }
+        })()
+
+    revalidatePath('/jobs')
+    return { processed: true, jobId: job.id, message: 'Job started' }
+}
+
+export async function checkJobStatus(jobId: string) {
+    const job = await prisma.searchJob.findUnique({
+        where: { id: jobId },
+        select: { status: true }
+    })
+    return job?.status || 'FAILED'
 }

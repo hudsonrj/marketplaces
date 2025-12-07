@@ -1,0 +1,25 @@
+--- INICIANDO DIAGNÓSTICO COMPLETO DO SISTEMA ---
+[DB] Conexão OK. Produtos cadastrados: 206
+[DB] Configurações carregadas.
+[DB] Provedor IA: openai
+[DB] Proxy Configurado: NÃO
+
+[SCRAPER] Testando busca por: "iphone 15"
+[MERCADO LIVRE] Acessando https://lista.mercadolivre.com.br/iphone%2015_ItemTypeID_2230284_OrderId_PRICE_ASC...
+[MERCADO LIVRE] ✅ SUCESSO: 58 itens encontrados.
+[AMAZON] Acessando https://www.amazon.com.br/s?k=iphone%2015&rh=p_n_condition-type:13862762011...
+[AMAZON] ✅ SUCESSO: 125 itens encontrados.
+[MAGALU] Acessando https://www.magazineluiza.com.br/busca/iphone%2015/...
+[MAGALU] ✅ SUCESSO: 70 itens encontrados.
+[SHOPEE] Acessando https://shopee.com.br/search?keyword=iphone%2015...
+[SHOPEE] ❌ FALHA: Timeout aguardando seletor.
+[SHOPEE] Título da página: 
+[CASAS BAHIA] Acessando https://www.casasbahia.com.br/iphone%2015/b...
+[CASAS BAHIA] ❌ BLOQUEADO (Status 403)
+[AMERICANAS] Acessando https://www.americanas.com.br/busca/iphone%2015...
+[AMERICANAS] ❌ FALHA: Timeout aguardando seletor.
+[AMERICANAS] Título da página: IPhone 15 128GB ou 256GB rosa, azul e mais: Promoção | Americanas
+[KABUM] Acessando https://www.kabum.com.br/busca?query=iphone%2015...
+[KABUM] ✅ SUCESSO: 18 itens encontrados.
+
+--- DIAGNÓSTICO FINALIZADO ---

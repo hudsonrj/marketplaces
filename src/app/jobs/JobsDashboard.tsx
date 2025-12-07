@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Search, RefreshCw, Eye, Clock, Trash2, Edit, Plus, Calendar, X, Save, Play } from 'lucide-react'
-import { createSearchJob, deleteJob, updateJob, processPendingJobs } from '../actions'
+import { createSearchJob, deleteJob, updateJob, processPendingJobs, processNextJob, checkJobStatus } from '../actions'
 
 interface Job {
     id: string
@@ -18,6 +18,7 @@ interface Job {
     product: {
         name: string
     }
+    resultsCount?: number
     results: {
         id: string
         jobId: string
@@ -53,6 +54,7 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
     const [editingJob, setEditingJob] = useState<Job | null>(null)
     const [viewLogsJob, setViewLogsJob] = useState<Job | null>(null)
     const [isProcessing, setIsProcessing] = useState(false)
+    const [processedCount, setProcessedCount] = useState(0)
 
     // Create Form State
     const [selectedProductId, setSelectedProductId] = useState('')
@@ -62,6 +64,16 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
     // Edit Form State
     const [editStatus, setEditStatus] = useState('')
     const [editDate, setEditDate] = useState('')
+
+    // Auto-start processing if requested via URL
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search)
+        if (params.get('autoStart') === 'true' && !isProcessing) {
+            // Remove param to avoid restart on refresh
+            window.history.replaceState({}, '', '/jobs')
+            handleProcessQueue()
+        }
+    }, [])
 
     // Auto-refresh if there are running jobs
     useEffect(() => {
@@ -101,20 +113,49 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
     }
 
     const handleProcessQueue = async () => {
+        if (isProcessing) return
         setIsProcessing(true)
+        setProcessedCount(0)
+
         try {
-            await processPendingJobs()
+            let hasMore = true
+            while (hasMore) {
+                // 1. Start the next job
+                const result = await processNextJob()
+
+                if (result.processed && result.jobId) {
+                    // 2. Poll until it's done
+                    let isJobDone = false
+                    while (!isJobDone) {
+                        await new Promise(resolve => setTimeout(resolve, 3000)) // Check every 3s
+                        const status = await checkJobStatus(result.jobId)
+                        if (status === 'COMPLETED' || status === 'FAILED') {
+                            isJobDone = true
+                        }
+                    }
+
+                    setProcessedCount(prev => prev + 1)
+                    router.refresh() // Refresh UI to show progress
+                } else {
+                    hasMore = false
+                }
+            }
         } catch (error) {
-            console.error(error)
+            console.error('Queue processing error:', error)
         } finally {
             setIsProcessing(false)
+            router.refresh()
         }
     }
 
     const openEditModal = (job: Job) => {
         setEditingJob(job)
         setEditStatus(job.status)
-        setEditDate(job.scheduledFor ? new Date(job.scheduledFor).toISOString().slice(0, 16) : '')
+        try {
+            setEditDate(job.scheduledFor ? new Date(job.scheduledFor).toISOString().slice(0, 16) : '')
+        } catch (e) {
+            setEditDate('')
+        }
     }
 
     return (
@@ -135,7 +176,7 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
                         style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}
                     >
                         <Play size={18} className={isProcessing ? 'animate-spin' : ''} />
-                        {isProcessing ? 'Processando...' : 'Rodar Pendentes'}
+                        {isProcessing ? `Processando (${processedCount})...` : 'Rodar Pendentes'}
                     </button>
                     <button onClick={() => router.refresh()} className="btn-secondary" title="Atualizar Lista">
                         <RefreshCw size={18} />
@@ -220,7 +261,7 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
                                         </div>
                                     </td>
                                     <td style={{ padding: '1rem', color: '#cbd5e1' }}>
-                                        {job.results.length} itens
+                                        {job.resultsCount !== undefined ? job.resultsCount : job.results.length} itens
                                     </td>
                                     <td style={{ padding: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                                         <button onClick={() => setViewLogsJob(job)} className="btn-icon" title="Ver Logs">
@@ -267,7 +308,7 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
                                     <div key={index} style={{ padding: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', borderLeft: '3px solid #3b82f6' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
                                             <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                                                {new Date(log.timestamp).toLocaleTimeString()}
+                                                {log.timestamp && !isNaN(new Date(log.timestamp).getTime()) ? new Date(log.timestamp).toLocaleTimeString() : '-'}
                                             </span>
                                             <span style={{ fontSize: '0.75rem', color: '#3b82f6', fontWeight: 'bold' }}>
                                                 {log.progress}%
@@ -435,6 +476,7 @@ export default function JobsDashboard({ initialJobs, products }: { initialJobs: 
                     padding: 0.75rem;
                     color: white;
                     outline: none;
+                    focus: none;
                 }
                 .glass-input:focus {
                     border-color: #3b82f6;

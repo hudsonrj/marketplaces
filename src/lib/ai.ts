@@ -193,18 +193,20 @@ export async function smartParseProductBatch(
             6. Extract the Location (e.g., "São Paulo, SP"). If not found, return null.
             7. Extract the Condition (e.g., "Novo", "Usado", "Recondicionado"). Map to "new" or "used" or "refurbished". Default to "new" if not explicitly "used".
             
-            Return ONLY a JSON array of objects with this structure:
-            [
-                {
-                    "title": "string",
-                    "price": number,
-                    "link": "string",
-                    "image": "string",
-                    "seller": "string" | null,
-                    "location": "string" | null,
-                    "condition": "string" | null
-                }
-            ]
+            Return ONLY a JSON object with this structure:
+            {
+                "items": [
+                    {
+                        "title": "string",
+                        "price": number,
+                        "link": "string",
+                        "image": "string",
+                        "seller": "string" | null,
+                        "location": "string" | null,
+                        "condition": "string" | null
+                    }
+                ]
+            }
             `
 
             const completion = await client.chat.completions.create({
